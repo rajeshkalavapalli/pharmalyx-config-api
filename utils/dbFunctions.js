@@ -1,10 +1,17 @@
 const db = require('../db')
 
-const customQuery = async (sqlQuery) => {
+const customQuery = async (sqlQuery, inputs = []) => {
     try {
         const pool = await db.poolPromise;
 
-        const result = await pool.request().query(sqlQuery);
+        const request = pool.request();
+
+        Object.entries(inputs).forEach(([name, value]) => {
+            request.input(name, value);
+        });
+
+
+        const result = await request.query(sqlQuery);
 
         return result.recordset;
     } catch (error) {
