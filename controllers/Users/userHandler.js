@@ -1,4 +1,4 @@
-const userService = require('../Users/userService')
+const userService = require('../Users/UserService')
 
 exports.getDesignation= async (req,res)=>{
     try{
