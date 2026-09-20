@@ -1,5 +1,7 @@
 const AreaDA = require('./AreaDA')
 
+const { generateUUID } = require('../../utils/commonUtils');
+
 const generateAreaCode = (AreaName, sequence) => {
     const prefix = AreaName
         .replace(/\s+/g, '')
@@ -11,11 +13,44 @@ const generateAreaCode = (AreaName, sequence) => {
 
 exports.createArea = async (reqData) => {
     try{    
-        const result = await AreaDA.createArea(reqData);
+        const existingArea = await AreaDA.checkAreaExists(
+            reqData.TerritoryId,
+            reqData.AreaName.trim()
+        );
+
+        if (existingArea.length > 0) {
+            const duplicateError = new Error("Area already exists for this territory");
+            duplicateError.statusCode = 409;
+            throw duplicateError;
+        }
+
+        let areaCode = reqData.AreaCode;
+        if (!areaCode) {
+            const sequenceResult = await AreaDA.getNextAreaSequence(
+                reqData.TerritoryId
+            );
+            areaCode = generateAreaCode(
+                reqData.AreaName.trim(),
+                sequenceResult[0].NextSequence
+            );
+        }
+
+        const areaId = generateUUID();
+        const now = new Date();
+        const newArea = {
+            ...reqData,
+            AreaName: reqData.AreaName.trim(),
+            AreaCode: areaCode,
+            AreaId: areaId,
+            CreatedOn: now,
+            ModifiedOn: now
+        };
+        const result = await AreaDA.createArea(newArea);
         return result;
 
     }catch(err){
         console.log("error creating area", err )
+        throw err;
     }
 }
 

@@ -1,5 +1,5 @@
 module.exports = {
-    CREATE_AREA:()=>{
+    CREATE_AREA:(newArea)=>{
         return`
             INSERT INTO Areas(
                 AreaId,
@@ -24,14 +24,17 @@ module.exports = {
     GET_AREA_CODE:()=>{
         return`
             SELECT 
-            AreaId,
-            TerritoryId,
-            AreaName,
-            AreaCode,
-            IsActive,
-            CreatedOn,
-            ModifiedOn
-            FROM Areas 
+            a.AreaId,
+            a.TerritoryId,
+            a.AreaName,
+            a.AreaCode,
+            a.IsActive,
+            a.CreatedOn,
+            a.ModifiedOn,
+            t.TerritoryName
+            FROM Areas a
+            LEFT JOIN Territory t
+                ON t.TerritoryId = a.TerritoryId
             
         `
     },
@@ -59,7 +62,7 @@ CHECK_AREA_EXISTS: () => {
             IsActive
         FROM Areas
         WHERE TerritoryId = @TerritoryId
-          AND AreaName = @AreaName
+                    AND LOWER(LTRIM(RTRIM(AreaName))) = LOWER(LTRIM(RTRIM(@AreaName)))
     `;
 }
 
