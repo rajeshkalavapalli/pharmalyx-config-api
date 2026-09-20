@@ -4,13 +4,22 @@ exports.createArea = async (req,res)=>{
     try{
         const reqData = req.body;
         console.log("area data from frontend",reqData)
+
+        if (!reqData.TerritoryId || !reqData.AreaName) {
+            return res.status(400).json({
+                message: "Territory and area name are required"
+            });
+        }
+
         const result = await Areaservice.createArea(reqData)
         res.status(200).json(result)
     }catch(err){
         console.log("error creating area", err)
-         res.status(500).json({
-        message: "Failed to create area"
-    });
+        res.status(err.statusCode || 500).json({
+            message: err.statusCode === 409
+                ? err.message
+                : "Failed to create area"
+        });
     }
 }
 

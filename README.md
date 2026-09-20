@@ -14,3 +14,7 @@
 # V 1.0.3
 
 - Area  dropdown values from the api is added
+
+# V 1.0.4
+
+- Area  dropdown values from the api is added creation updated 

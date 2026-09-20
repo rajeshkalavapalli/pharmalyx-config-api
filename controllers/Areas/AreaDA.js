@@ -2,8 +2,8 @@ const sql = require('./sql')
 
 const { customQuery } = require('../../utils/dbFunctions')
 
-exports.createArea  = async(reqData)=>{
-    return await customQuery(sql.CREATE_AREA(), reqData);
+exports.createArea  = async(newArea)=>{
+    return await customQuery(sql.CREATE_AREA(), newArea);
 }
 
 exports.getAreasCode = async()=>{
