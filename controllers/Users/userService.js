@@ -22,7 +22,6 @@ exports.createUser = async (userData)=>{
             UserId:userId,
             PasswordHash:PasswordHash,
        }
-
        const result = await userDa.createUser(newUser)
         
        return  {

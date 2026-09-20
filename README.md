@@ -18,3 +18,7 @@
 # V 1.0.4
 
 - Area  dropdown values from the api is added creation updated 
+
+# V 1.0.5
+
+- user divison and territoty id updated 

@@ -33,7 +33,7 @@ module.exports = {
         `
     },
 
-    CREATE_USER: ()=>{
+    CREATE_USER: (newUser)=>{
         return `
         INSERT INTO Users(
             UserId,
@@ -45,6 +45,8 @@ module.exports = {
             MobileNumber,
             PasswordHash,
             DesignationId,
+            TerritoryId,
+            DivisionId,
             ManagerId,
             CreatedOn,
             ModifiedOn
@@ -59,6 +61,8 @@ module.exports = {
            @MobileNumber,
            @PasswordHash,
            @DesignationId,
+           @TerritoryId,
+           @DivisionId,
            @ManagerId,
            GETDATE(),
            GETDATE()
