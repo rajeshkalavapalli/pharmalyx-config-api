@@ -22,3 +22,7 @@
 # V 1.0.5
 
 - user divison and territoty id updated 
+
+# V 1.0.6
+
+- user multiple territoty mutiple areas updated  
