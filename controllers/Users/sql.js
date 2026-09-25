@@ -14,6 +14,16 @@ module.exports = {
         u.ModifiedOn AS ModifiedOn,
         u.divisionId AS DivisionId,
         u.territoryId AS TerritoryId,
+        ISNULL((
+            SELECT STRING_AGG(CONVERT(varchar(36), ust.StateId), ',')
+            FROM UserStateMapping ust
+            WHERE ust.UserId = u.UserId
+        ), '') AS StateIds,
+        ISNULL((
+            SELECT STRING_AGG(CONVERT(varchar(36), utm.TerritoryId), ',')
+            FROM UserTerritoryMapping utm
+            WHERE utm.UserId = u.UserId
+        ), '') AS TerritoryIds,
         
         sld.SystemLovDetailCode AS SldCode,
         sld.SystemLovDetailName AS SldName,

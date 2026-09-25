@@ -26,3 +26,7 @@
 # V 1.0.6
 
 - user multiple territoty mutiple areas updated  
+
+# V 1.0.7
+
+- user multiple territoty mutiple areas  maping is fixed 
