@@ -12,6 +12,8 @@ const territoryRoutes = require('./controllers/Territory')
 
 const areaRoutes = require('./controllers/Areas')
 
+const userAreaMaping = require('./controllers/UserAreaMapping')
+
 const { poolPromise } = require('./db');
 
 app.use(express.json());
@@ -22,6 +24,7 @@ app.use('/app',divisionRoutes)
 app.use('/app',countryRoutes)
 app.use('/app',territoryRoutes)
 app.use('/app',areaRoutes)
+app.use('/app', userAreaMaping)
 
 
 

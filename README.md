@@ -30,3 +30,7 @@
 # V 1.0.7
 
 - user multiple territoty mutiple areas  maping is fixed 
+
+# V 1.0.8
+
+- user area mapping is updated  
