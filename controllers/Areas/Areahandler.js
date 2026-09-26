@@ -12,7 +12,12 @@ exports.createArea = async (req,res)=>{
         }
 
         const result = await Areaservice.createArea(reqData)
-        res.status(200).json(result)
+
+        res.status(201).json({
+            success: true,
+            message: "Area created successfully",
+            result,
+        });
     }catch(err){
         console.log("error creating area", err)
         res.status(err.statusCode || 500).json({

@@ -16,7 +16,7 @@ exports.getTerritorie = async (StateId) => {
         await customQuery(
             sql.GET_TERRITORIES_BY_STATE(),
             {
-                StateId: StateId
+                StateId
             }
         );
 

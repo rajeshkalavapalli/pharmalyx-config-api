@@ -18,3 +18,19 @@
 # V 1.0.4
 
 - Area  dropdown values from the api is added creation updated 
+
+# V 1.0.5
+
+- user divison and territoty id updated 
+
+# V 1.0.6
+
+- user multiple territoty mutiple areas updated  
+
+# V 1.0.7
+
+- user multiple territoty mutiple areas  maping is fixed 
+
+# V 1.0.8
+
+- user area mapping is updated  
