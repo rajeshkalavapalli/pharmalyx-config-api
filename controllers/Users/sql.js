@@ -9,14 +9,31 @@ module.exports = {
         u.MobileNumber AS MobileNumber,
         u.DesignationId As DesignationId, 
         u.ManagerId AS ManagerId,
+        mgr.UserName AS ManagerName,
         u.CreatedOn AS CreatedOn,
         u.ModifiedOn AS ModifiedOn,
-
+        u.divisionId AS DivisionId,
+        u.territoryId AS TerritoryId,
+        ISNULL((
+            SELECT STRING_AGG(CONVERT(varchar(36), ust.StateId), ',')
+            FROM UserStateMapping ust
+            WHERE ust.UserId = u.UserId
+        ), '') AS StateIds,
+        ISNULL((
+            SELECT STRING_AGG(CONVERT(varchar(36), utm.TerritoryId), ',')
+            FROM UserTerritoryMapping utm
+            WHERE utm.UserId = u.UserId
+        ), '') AS TerritoryIds,
+        
         sld.SystemLovDetailCode AS SldCode,
-        sld.SystemLovDetailName AS SldName
+        sld.SystemLovDetailName AS SldName,
+
+        d.DivisionName AS DivisionName
 
         FROM Users u
         LEFT JOIN SystemLovDetails sld ON u.DesignationId = sld.SystemLovDetailId
+        LEFT JOIN Division d ON u.DivisionId = d.DivisionId
+        LEFT JOIN Users mgr ON u.ManagerId = mgr.UserId
         `
     },
 
@@ -33,7 +50,7 @@ module.exports = {
         `
     },
 
-    CREATE_USER: ()=>{
+    CREATE_USER: () => {
         return `
         INSERT INTO Users(
             UserId,
@@ -45,6 +62,7 @@ module.exports = {
             MobileNumber,
             PasswordHash,
             DesignationId,
+            DivisionId,
             ManagerId,
             CreatedOn,
             ModifiedOn
@@ -59,10 +77,45 @@ module.exports = {
            @MobileNumber,
            @PasswordHash,
            @DesignationId,
+           @DivisionId,
            @ManagerId,
            GETDATE(),
            GETDATE()
         )
         `
+    },
+
+    CREATE_USER_STATE_MAPPING: () => {
+        return `
+            INSERT INTO UserStateMapping (
+                UserId,
+                StateId,
+                CreatedOn,
+                ModifiedOn
+            )
+            VALUES (
+                @UserId,
+                @StateId,
+                GETDATE(),
+                GETDATE()
+            )
+        `;
+    },
+
+    CREATE_USER_TERRITORY_MAPPING: () => {
+        return `
+            INSERT INTO UserTerritoryMapping (
+                UserId,
+                TerritoryId,
+                CreatedOn,
+                ModifiedOn
+            )
+            VALUES (
+                @UserId,
+                @TerritoryId,
+                GETDATE(),
+                GETDATE()
+            )
+        `;
     }
 }
