@@ -19,3 +19,6 @@ exports.checkAreaExists = async (TerritoryId, AreaName) => {
     return await customQuery(sql.CHECK_AREA_EXISTS(), { TerritoryId, AreaName });
 }
 
+exports.getAreasByTerritory = async (TerritoryId) => {
+    return await customQuery(sql.GET_AREAS_BY_TERRITORY(), { TerritoryId });
+}

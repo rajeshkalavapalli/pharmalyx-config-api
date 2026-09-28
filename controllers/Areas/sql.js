@@ -64,6 +64,23 @@ CHECK_AREA_EXISTS: () => {
         WHERE TerritoryId = @TerritoryId
                     AND LOWER(LTRIM(RTRIM(AreaName))) = LOWER(LTRIM(RTRIM(@AreaName)))
     `;
-}
+},
 
+    GET_AREAS_BY_TERRITORY: () => {
+        return `
+             SELECT 
+            a.AreaId,
+            a.TerritoryId,
+            a.AreaName,
+            a.AreaCode,
+            a.IsActive,
+            a.CreatedOn,
+            a.ModifiedOn,
+            t.TerritoryName
+        FROM Areas a
+        LEFT JOIN Territory t
+            ON t.TerritoryId = a.TerritoryId
+        WHERE a.TerritoryId = @TerritoryId
+        `;
+    }
 }

@@ -82,3 +82,16 @@ exports.previewAreaCode = async (req,res)=>{
         });
     }
 }
+
+exports.getAreasByTerritory = async (req,res)=>{
+    try{
+        const {TerritoryId} = req.params;
+        const result = await Areaservice.getAreasByTerritory(TerritoryId);
+        res.status(200).json(result);
+    }catch(err){
+        console.log("error in get areas by territory", err)
+        res.status(500).json({
+            message: "Failed to get areas by territory"
+        });
+    }   
+}
