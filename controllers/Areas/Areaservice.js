@@ -118,3 +118,13 @@ exports.previewAreaCode = async (TerritoryId, AreaName) => {
         throw err;
     }
 };
+
+exports.getAreasByTerritory = async (TerritoryId) => {
+    try{
+        const result = await AreaDA.getAreasByTerritory(TerritoryId);
+        return result;
+    }catch(err){
+        console.log("error in get areas by territory", err)
+        throw err;
+    }
+}

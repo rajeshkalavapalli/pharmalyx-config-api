@@ -12,9 +12,8 @@ router.get("/get-next-area-sequence/:TerritoryId",AreaHandler.getnextAreaSequenc
 
 router.get("/check-area-exists/:TerritoryId/:AreaName",AreaHandler.checkAreaExists);
 
-router.get(
-    "/preview-area-code/:TerritoryId/:AreaName",
-    AreaHandler.previewAreaCode
-);
+router.get("/preview-area-code/:TerritoryId/:AreaName",AreaHandler.previewAreaCode);
+
+router.get("/get-areas-by-territory/:TerritoryId",AreaHandler.getAreasByTerritory); 
 
 module.exports = router
