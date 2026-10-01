@@ -55,3 +55,33 @@ exports.getTerritories = async()=>{
         console.log("error getting territores", err)
     }
 }
+
+exports.updateTerritory = async (TerritoryId, updatedData) => {
+    try {
+        const updatedTerritory = await TerritoryDA.updateTerritory(TerritoryId, updatedData);
+        return updatedTerritory;
+    } catch (err) {
+        console.log("error updating territory", err);
+        throw err;
+    }
+};
+
+exports.deleteTerritory = async (TerritoryId) => {
+    try {
+        const deletedTerritory = await TerritoryDA.deleteTerritory(TerritoryId);
+        return deletedTerritory;
+    } catch (err) {
+        console.log("error deleting territory", err);
+        throw err;
+    }
+};
+
+exports.getTerritoryById = async (TerritoryId) => {
+    try {
+        const territory = await TerritoryDA.getTerritoryById(TerritoryId);
+        return territory;
+    } catch (err) {
+        console.log("error fetching territory by id", err);
+        throw err;
+    }
+};  

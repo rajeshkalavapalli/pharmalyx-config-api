@@ -35,3 +35,43 @@ exports.getDoctors = async (req, res) => {
         });
     }
 }
+
+exports.getDoctorById = async (req, res) => {
+    try {
+        const doctorId = req.params.doctorId;
+        const result = await doctorService.getDoctorById(doctorId);
+        res.status(200).json(result);
+    } catch (err) {
+        console.log("error getting doctor by ID", err);
+        res.status(500).json({
+            message: "Failed to get doctor by ID"
+        });
+    }
+}
+
+exports.updateDoctor = async (req, res) => {
+    try {
+        const doctorId = req.params.doctorId;
+        const updatedDoctor = req.body;
+        const result = await doctorService.updateDoctor(doctorId, updatedDoctor);
+        res.status(200).json(result);
+    } catch (err) {
+        console.log("error updating doctor", err);
+        res.status(500).json({
+            message: "Failed to update doctor"
+        });
+    }
+}
+
+exports.deleteDoctor = async (req, res) => {
+    try {
+        const doctorId = req.params.doctorId;
+        const result = await doctorService.deleteDoctor(doctorId);
+        res.status(200).json(result);
+    } catch (err) {
+        console.log("error deleting doctor", err);
+        res.status(500).json({
+            message: "Failed to delete doctor"
+        });
+    }
+}    

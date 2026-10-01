@@ -18,6 +18,8 @@ const doctorRoutes = require('./controllers/Doctors')
 
 const userDoctorMapping = require('./controllers/UserDoctorMapping')
 
+const Pharmacy = require('./controllers/Pharmacy')
+
 const { poolPromise } = require('./db');
 
 app.use(express.json());
@@ -31,6 +33,7 @@ app.use('/app',areaRoutes)
 app.use('/app', userAreaMaping)
 app.use('/app', doctorRoutes)
 app.use('/app', userDoctorMapping)
+app.use('/app', Pharmacy)
 
 
 

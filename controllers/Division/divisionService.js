@@ -1,5 +1,5 @@
 
-const {createDivision,getDivisions} = require('./divisionDA')
+const {createDivision,getDivisions,getDivisionById,updateDivision,deleteDivision} = require('./divisionDA')
 const { generateUUID } = require("../../utils/commonUtils")
 
 
@@ -31,5 +31,32 @@ exports.getDivisions = async()=>{
         return result
     }catch(err){
         console.log("error getting divisions", err)
+    }
+}
+
+exports.getDivisionById = async(divisionId)=>{
+    try{
+        const result = await getDivisionById(divisionId)
+        return result
+    }catch(err){
+        console.log("error getting division by ID", err)
+    }
+}
+
+exports.updateDivision = async(divisionId, updatedDivision)=>{
+    try{
+        const result = await updateDivision(divisionId, updatedDivision)
+        return result
+    }catch(err){
+        console.log("error updating division", err)
+    }
+}
+
+exports.deleteDivision = async(divisionId)=>{
+    try{
+        const result = await deleteDivision(divisionId)
+        return result
+    }catch(err){
+        console.log("error deleting division", err)
     }
 }

@@ -18,3 +18,31 @@ exports.createUserAreaMapping = async (mapping) => {
 		mapping
 	);
 };
+
+exports.updateUserAreaMapping = async (userId, mappings) => {
+	return await customQuery(
+		sql.UPDATE_USER_MAPPING(),
+		{ UserId: userId, Mappings: mappings }
+	);
+};
+
+exports.getUserAreaMappingById = async (userId) => {
+	return await customQuery(
+		sql.GET_USER_MAPPING_BY_ID(),
+		{ UserId: userId }
+	);
+};	
+
+exports.getUserAreaMappingByUserId = async (userId) => {
+	return await customQuery(
+		sql.GET_USER_MAPPING_BY_USER_ID(),
+		{ UserId: userId }
+	);
+};
+
+exports.deleteUserAreaMapping = async (userId) => {
+	return await customQuery(
+		sql.DELETE_USER_MAPPING(),
+		{ UserId: userId }
+	);
+};

@@ -128,3 +128,33 @@ exports.getAreasByTerritory = async (TerritoryId) => {
         throw err;
     }
 }
+
+exports.getAreasById = async (AreaId) => {
+    try{
+        const result = await AreaDA.getAreasById(AreaId);
+        return result;
+    }catch(err){
+        console.log("error in get areas by id", err)
+        throw err;
+    }
+}
+
+exports.updateArea = async (AreaId, updateData) => {
+    try{
+        const result = await AreaDA.updateArea(AreaId, updateData);
+        return result;
+    }catch(err){
+        console.log("error in update area", err)
+        throw err;
+    }
+}
+
+exports.deleteArea = async (AreaId) => {
+    try{
+        const result = await AreaDA.deleteArea(AreaId);
+        return result;
+    }catch(err){
+        console.log("error in delete area", err)
+        throw err;
+    }
+}

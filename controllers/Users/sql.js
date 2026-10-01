@@ -6,6 +6,7 @@ module.exports = {
         u.FirstName  AS FirstName,
         u.LastName AS LastName,
         u.EmailId AS EmailId,
+        u.CountryCode AS CountryCode,
         u.MobileNumber AS MobileNumber,
         u.DesignationId As DesignationId, 
         u.ManagerId AS ManagerId,
@@ -116,6 +117,55 @@ module.exports = {
                 GETDATE(),
                 GETDATE()
             )
+        `;
+    },
+    UPDATE_USER: () => {
+        return `
+        UPDATE Users
+        SET
+            UserName = @UserName,
+            FirstName = @FirstName,
+            LastName = @LastName,
+            EmailId = @EmailId,
+            CountryCode = @CountryCode,
+            MobileNumber = @MobileNumber,
+            DesignationId = @DesignationId,
+            DivisionId = @DivisionId,
+            ManagerId = @ManagerId,
+            ModifiedOn = GETDATE()
+        WHERE UserId = @UserId
+        `
+    },
+    DELETE_USER: () => {
+        return `
+        DELETE FROM Users
+        WHERE UserId = @UserId
+        `
+    }, 
+    GET_USER_BY_ID: () => {
+        return `
+        SELECT
+            UserId,
+            UserName,
+            FirstName,
+            LastName,
+            EmailId,
+            CountryCode,
+            MobileNumber,
+            DesignationId,
+            DivisionId,
+            ManagerId,
+            CreatedOn,
+            ModifiedOn
+        FROM Users
+        WHERE UserId = @UserId
+        `
+    },
+    UPDATE_MANAGER_REFERENCE: () => {
+        return `
+        UPDATE Users
+            SET ManagerId = NULL
+        WHERE ManagerId = @UserId
         `;
     }
 }
