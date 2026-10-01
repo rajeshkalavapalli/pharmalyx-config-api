@@ -46,3 +46,41 @@ exports.createUser = async (newUser, stateIds = [], territoryIds = []) => {
 exports.getUsers = async () => {
     return await customQuery(sql.GET_USERS());
 };
+
+exports.updateUser = async (updatedUser) => {
+    await customQuery(sql.UPDATE_USER(), updatedUser);
+
+    return {
+        success: true,
+        message: 'User updated successfully',
+        UserId: updatedUser.UserId,
+        UserName: updatedUser.UserName,
+        DesignationId: updatedUser.DesignationId,
+        DivisionId: updatedUser.DivisionId,
+        CountryId: updatedUser.CountryId,
+    };
+};
+
+exports.deleteUser = async (userId) => {
+    await runInTransaction([
+        {
+            sqlQuery: sql.UPDATE_MANAGER_REFERENCE(),
+            inputs: { UserId: userId },
+        },
+        {
+            sqlQuery: sql.DELETE_USER(),
+            inputs: { UserId: userId },
+        },
+    ]);
+
+    return {
+        success: true,
+        message: 'User deleted successfully',
+        UserId: userId,
+    };
+};
+
+exports.getUserById = async (userId) => {
+    const result = await customQuery(sql.GET_USER_BY_ID(), { UserId: userId });
+    return result[0] || null;
+};  

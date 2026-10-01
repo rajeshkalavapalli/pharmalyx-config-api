@@ -60,4 +60,57 @@ module.exports = {
             ORDER BY d.CreatedOn DESC
         `;
     },
+    GET_DOCTOR_BY_ID: () => {
+        return `
+            SELECT
+                d.DoctorId,
+                d.DoctorName,
+                d.Qualification,
+                d.Speciality,
+                d.HospitalName,
+                d.MobileNumber,
+                d.EmailId,
+                d.CountryId,
+                d.StateId,
+                d.TerritoryId,
+                d.AreaId,
+                d.IsActive,
+                d.CreatedOn,
+                d.ModifiedOn,
+                a.AreaName,
+                t.TerritoryName
+            FROM dbo.Doctor d
+            LEFT JOIN Areas a ON a.AreaId = d.AreaId
+            LEFT JOIN Territory t ON t.TerritoryId = d.TerritoryId
+            WHERE d.DoctorId = @DoctorId
+        `;
+    },
+    DEACTIVATE_DOCTOR: () => {
+    return `
+        UPDATE dbo.Doctor
+        SET
+            IsActive = 'No',
+            ModifiedOn = GETDATE()
+        WHERE DoctorId = @DoctorId
+    `;
+},
+    UPDATE_DOCTOR: () => {
+        return `
+            UPDATE dbo.Doctor
+            SET
+                DoctorName = @DoctorName,
+                Qualification = @Qualification,
+                Speciality = @Speciality,
+                HospitalName = @HospitalName,
+                MobileNumber = @MobileNumber,
+                EmailId = @EmailId,
+                CountryId = @CountryId,
+                StateId = @StateId,
+                TerritoryId = @TerritoryId,
+                AreaId = @AreaId,
+                IsActive = @IsActive,
+                ModifiedOn = @ModifiedOn
+            WHERE DoctorId = @DoctorId
+        `;
+    }
 };

@@ -22,3 +22,15 @@ exports.checkAreaExists = async (TerritoryId, AreaName) => {
 exports.getAreasByTerritory = async (TerritoryId) => {
     return await customQuery(sql.GET_AREAS_BY_TERRITORY(), { TerritoryId });
 }
+
+exports.updateArea = async (AreaId, reqData) => {
+    return await customQuery(sql.UPDATE_AREA(), { AreaId, ...reqData });
+}
+
+exports.deleteArea = async (AreaId) => {
+    return await customQuery(sql.DELETE_AREA(), { AreaId });
+}
+
+exports.getAreasById = async (AreaId) => {
+    return await customQuery(sql.GET_AREAS_BY_ID(), { AreaId });
+}

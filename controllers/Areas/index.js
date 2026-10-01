@@ -16,4 +16,10 @@ router.get("/preview-area-code/:TerritoryId/:AreaName",AreaHandler.previewAreaCo
 
 router.get("/get-areas-by-territory/:TerritoryId",AreaHandler.getAreasByTerritory); 
 
+router.put("/update-area/:AreaId", AreaHandler.updateArea);
+
+router.delete("/delete-area/:AreaId", AreaHandler.deleteArea);
+
+router.get("/get-areas-by-id/:AreaId", AreaHandler.getAreasById);
+
 module.exports = router

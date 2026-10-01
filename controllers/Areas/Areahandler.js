@@ -95,3 +95,54 @@ exports.getAreasByTerritory = async (req,res)=>{
         });
     }   
 }
+
+exports.updateArea = async (req,res)=>{
+    try{
+        const {AreaId} = req.params;
+        const reqData = req.body;
+        const result = await Areaservice.updateArea(AreaId, reqData)
+        res.status(200).json({
+            success: true,
+            message: "Area updated successfully",
+            result,
+        });
+    }catch(err){
+        console.log("error updating area", err)
+        res.status(err.statusCode || 500).json({
+            message: err.statusCode === 404
+                ? err.message
+                : "Failed to update area"
+        });
+    }
+}
+exports.deleteArea = async (req,res)=>{
+    try{
+        const {AreaId} = req.params;
+        const result = await Areaservice.deleteArea(AreaId)
+        res.status(200).json({
+            success: true,
+            message: "Area deleted successfully",
+            result,
+        });
+    }catch(err){
+        console.log("error deleting area", err)
+        res.status(err.statusCode || 500).json({
+            message: err.statusCode === 404
+                ? err.message
+                : "Failed to delete area"
+        });
+    }
+}
+
+exports.getAreasById = async (req,res)=>{
+    try{
+        const {AreaId} = req.params;
+        const result = await Areaservice.getAreasById(AreaId);
+        res.status(200).json(result);
+    }catch(err){
+        console.log("error in get areas by id", err)
+        res.status(500).json({
+            message: "Failed to get areas by id"
+        });
+    }   
+}

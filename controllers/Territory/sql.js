@@ -52,5 +52,35 @@ LEFT JOIN State s
 ORDER BY t.TerritoryName ASC;
 
         `
+    },
+    UPDATE_TERRITORY: () => {
+        return `
+            UPDATE Territory
+            SET
+                TerritoryName = @TerritoryName,
+                IsActive = @IsActive,
+                ModifiedOn = @ModifiedOn,
+                StateId = @StateId
+            WHERE TerritoryId = @TerritoryId
+        `;
+    },
+    DELETE_TERRITORY: () => {
+        return `
+            DELETE FROM Territory
+            WHERE TerritoryId = @TerritoryId
+        `;
+    },
+    GET_TERRITORY_BY_ID: () => {
+        return `
+            SELECT
+                TerritoryId,
+                TerritoryName,
+                StateId,
+                IsActive,
+                CreatedOn,
+                ModifiedOn
+            FROM Territory
+            WHERE TerritoryId = @TerritoryId
+        `;
     }
 }

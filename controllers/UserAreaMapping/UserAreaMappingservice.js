@@ -32,3 +32,19 @@ exports.createUserAreaMappings = async (userId, mappings) => {
 		message: 'User area mapping saved successfully',
 	};
 };
+
+exports.updateUserAreaMapping = async (userId, mappings) => {
+	return await UserAreaMappingDA.updateUserAreaMapping(userId, mappings);
+};
+
+exports.getUserAreaMappingById = async (userId) => {
+	return await UserAreaMappingDA.getUserAreaMappingById(userId);
+};
+
+exports.getUserAreaMappingByUserId = async (userId) => {
+	return await UserAreaMappingDA.getUserAreaMappingByUserId(userId);
+};
+
+exports.deleteUserAreaMapping = async (userId) => {
+	return await UserAreaMappingDA.deleteUserAreaMapping(userId);
+};

@@ -45,3 +45,31 @@ exports.getDoctors = async () => {
         throw err;
     }
 }
+
+
+exports.getDoctorById = async (doctorId) => {
+    try {
+        return await DoctorDA.getDoctorById(doctorId);
+    } catch (err) {
+        console.log("error getting doctor by ID", err)
+        throw err;
+    }
+}
+
+exports.updateDoctor = async (doctorId, updatedDoctor) => {
+    try {
+        return await DoctorDA.updateDoctor(doctorId, updatedDoctor);
+    } catch (err) {
+        console.log("error updating doctor", err)
+        throw err;
+    }
+}
+
+exports.deleteDoctor = async (doctorId) => {
+    try {
+        return await DoctorDA.deactivateDoctor(doctorId);
+    } catch (err) {
+        console.log("error deleting doctor", err)
+        throw err;
+    }
+}       

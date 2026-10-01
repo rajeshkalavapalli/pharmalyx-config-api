@@ -1,4 +1,4 @@
-const {createDivision,getDivisions} = require('./divisionService')
+const {createDivision,getDivisions,getDivisionById,updateDivision,deleteDivision} = require('./divisionService')
 exports.createDivision = async(req, res)=>{
     try{
         const divData = req.body;
@@ -19,5 +19,36 @@ exports.getDivisions = async(req, res)=>{
         
     }catch(err){
         console.log("error in get division", err)
+    }
+}
+
+exports.getDivisionById = async(req, res)=>{
+    try{
+        const divisionId = req.params.divisionId;
+        const division = await getDivisionById(divisionId)
+        res.status(200).json(division)
+    }catch(err){
+        console.log("error in get division by ID", err)
+    }
+}
+
+exports.updateDivision = async(req, res)=>{
+    try{
+        const divisionId = req.params.divisionId;
+        const updatedDivision = req.body;
+        const result = await updateDivision(divisionId, updatedDivision)
+        res.status(200).json(result)
+    }catch(err){
+        console.log("error updating the division", err)
+    }
+}
+
+exports.deleteDivision = async(req, res)=>{
+    try{
+        const divisionId = req.params.divisionId;
+        const result = await deleteDivision(divisionId)
+        res.status(200).json(result)
+    }catch(err){
+        console.log("error deleting the division", err)
     }
 }

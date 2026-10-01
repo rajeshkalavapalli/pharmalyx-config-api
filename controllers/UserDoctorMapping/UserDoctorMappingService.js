@@ -31,3 +31,15 @@ exports.createUserDoctorMappings = async (userId, mappings) => {
 		message: 'User doctor mapping saved successfully',
 	};
 };
+
+exports.updateUserDoctorMapping = async (mapping) => {
+	return await UserDoctorMappingDA.updateUserDoctorMapping(mapping);
+};
+
+exports.getUserDoctorMappingById = async (userId) => {
+	return await UserDoctorMappingDA.getUserDoctorMappingById(userId);
+};
+
+exports.getUserDoctorMappingByUserId = async (userId) => {
+	return await UserDoctorMappingDA.getUserDoctorMappingByUserId(userId);
+};

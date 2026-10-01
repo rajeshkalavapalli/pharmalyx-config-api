@@ -18,3 +18,23 @@ exports.createUserDoctorMapping = async (mapping) => {
 		mapping
 	);
 };
+exports.updateUserDoctorMapping = async (mapping) => {
+	return await customQuery(
+		sql.UPDATE_USER_MAPPING(),
+		mapping
+	);
+};
+exports.getUserDoctorMappingById = async (userId) => {
+	return await customQuery(
+		sql.GET_USER_DOCTOR_MAPPING_BY_ID(),
+		{ UserId: userId }
+	);
+};
+
+exports.getUserDoctorMappingByUserId = async (userId) => {
+	return await customQuery(
+		sql.GET_USER_DOCTOR_MAPPING_BY_USER_ID(),
+		{ UserId: userId }
+	);
+};	
+

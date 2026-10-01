@@ -57,3 +57,30 @@ exports.getUsers = async () => {
         throw err;
     }
 };
+
+exports.updateUser = async (updatedUser) => {
+    try {
+        return await userDa.updateUser(updatedUser);
+    } catch (err) {
+        console.log("error updating the user", err);
+        throw err;
+    }
+};
+
+exports.deleteUser = async (userId) => {
+    try {
+        return await userDa.deleteUser(userId);
+    } catch (err) {
+        console.log("error deleting the user", err);
+        throw err;
+    }
+};
+
+exports.getUserById = async (userId) => {
+    try {
+        return await userDa.getUserById(userId);
+    } catch (err) {
+        console.log("error fetching the user by ID", err);
+        throw err;
+    }
+};

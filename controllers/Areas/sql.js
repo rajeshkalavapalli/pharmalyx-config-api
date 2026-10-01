@@ -31,10 +31,14 @@ module.exports = {
             a.IsActive,
             a.CreatedOn,
             a.ModifiedOn,
-            t.TerritoryName
+            t.TerritoryName,
+            t.StateId,
+            s.CountryId
             FROM Areas a
             LEFT JOIN Territory t
                 ON t.TerritoryId = a.TerritoryId
+            LEFT JOIN State s
+                ON s.StateId = t.StateId
             
         `
     },
@@ -82,5 +86,42 @@ CHECK_AREA_EXISTS: () => {
             ON t.TerritoryId = a.TerritoryId
         WHERE a.TerritoryId = @TerritoryId
         `;
-    }
+    },
+    UPDATE_AREA: () => {
+        return `
+            UPDATE Areas
+            SET
+                TerritoryId = @TerritoryId,
+                AreaName = @AreaName,
+                AreaCode = @AreaCode,
+                IsActive = @IsActive,
+                ModifiedOn = @ModifiedOn
+            WHERE AreaId = @AreaId
+        `;
+    },
+
+    DELETE_AREA: () => {
+        return `
+            DELETE FROM Areas
+            WHERE AreaId = @AreaId
+        `;
+    },
+
+    GET_AREAS_BY_ID: () => {
+        return `
+            SELECT 
+                a.AreaId,
+                a.TerritoryId,
+                a.AreaName,
+                a.AreaCode,
+                a.IsActive,
+                a.CreatedOn,
+                a.ModifiedOn,
+                t.TerritoryName
+            FROM Areas a
+            LEFT JOIN Territory t
+                ON t.TerritoryId = a.TerritoryId
+            WHERE a.AreaId = @AreaId
+        `;
+    },
 }
