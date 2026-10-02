@@ -39,17 +39,18 @@ module.exports = {
         return `
         
         SELECT
-    t.TerritoryId,
-    t.TerritoryName,
-    t.StateId,
-    s.StateName,
-    t.IsActive,
-    t.CreatedOn,
-    t.ModifiedOn
-FROM Territory t
-LEFT JOIN State s
-    ON s.StateId = t.StateId
-ORDER BY t.TerritoryName ASC;
+            t.TerritoryId,
+            t.TerritoryName,
+            t.StateId,
+            s.StateName,
+            s.CountryId,
+            t.IsActive,
+            t.CreatedOn,
+            t.ModifiedOn
+        FROM Territory t
+        LEFT JOIN State s
+            ON s.StateId = t.StateId
+        ORDER BY t.TerritoryName ASC;
 
         `
     },
@@ -72,15 +73,19 @@ ORDER BY t.TerritoryName ASC;
     },
     GET_TERRITORY_BY_ID: () => {
         return `
-            SELECT
-                TerritoryId,
-                TerritoryName,
-                StateId,
-                IsActive,
-                CreatedOn,
-                ModifiedOn
-            FROM Territory
-            WHERE TerritoryId = @TerritoryId
+             SELECT
+            t.TerritoryId,
+            t.TerritoryName,
+            t.StateId,
+            s.StateName,
+            s.CountryId,
+            t.IsActive,
+            t.CreatedOn,
+            t.ModifiedOn
+        FROM Territory t
+        LEFT JOIN State s
+         ON s.StateId = t.StateId
+        WHERE t.TerritoryId = @TerritoryId
         `;
     }
 }
