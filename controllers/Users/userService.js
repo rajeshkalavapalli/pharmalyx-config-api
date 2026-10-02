@@ -60,7 +60,31 @@ exports.getUsers = async () => {
 
 exports.updateUser = async (updatedUser) => {
     try {
-        return await userDa.updateUser(updatedUser);
+        if (!updatedUser || !updatedUser.UserId) {
+            throw new Error("UserId is required");
+        }
+
+        if (!updatedUser.UserName) {
+            throw new Error("UserName is required");
+        }
+
+        if (!Array.isArray(updatedUser.StateIds) || updatedUser.StateIds.length === 0) {
+            throw new Error("At least one state is required");
+        }
+
+        if (!Array.isArray(updatedUser.TerritoryIds) || updatedUser.TerritoryIds.length === 0) {
+            throw new Error("At least one territory is required");
+        }
+
+        const {
+            CountryId,
+            StateIds,
+            TerritoryIds,
+            password,
+            ...userDetails
+        } = updatedUser;
+
+        return await userDa.updateUser(userDetails, StateIds, TerritoryIds, CountryId);
     } catch (err) {
         console.log("error updating the user", err);
         throw err;

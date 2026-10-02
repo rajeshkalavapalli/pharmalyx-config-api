@@ -38,3 +38,10 @@
 # V 1.0.9
 
 - Adeed Doctor  creation
+
+# V 1.0.10
+
+- Adeed stockist and pharmacy
+
+# V 1.0.11
+edit view delete for area, user, division, territoty

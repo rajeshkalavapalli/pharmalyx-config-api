@@ -58,7 +58,11 @@ exports.getTerritories = async()=>{
 
 exports.updateTerritory = async (TerritoryId, updatedData) => {
     try {
-        const updatedTerritory = await TerritoryDA.updateTerritory(TerritoryId, updatedData);
+        const updateData = {
+            ...updatedData,
+            modifiedOn: new Date(),
+        };
+        const updatedTerritory = await TerritoryDA.updateTerritory(TerritoryId, updateData);
         return updatedTerritory;
     } catch (err) {
         console.log("error updating territory", err);

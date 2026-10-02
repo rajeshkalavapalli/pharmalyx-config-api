@@ -21,6 +21,13 @@ module.exports = {
             WHERE ust.UserId = u.UserId
         ), '') AS StateIds,
         ISNULL((
+            SELECT TOP (1) CONVERT(varchar(36), s.CountryId)
+            FROM UserStateMapping ust
+            INNER JOIN State s ON s.StateId = ust.StateId
+            WHERE ust.UserId = u.UserId
+            ORDER BY s.StateName
+        ), '') AS CountryId,
+        ISNULL((
             SELECT STRING_AGG(CONVERT(varchar(36), utm.TerritoryId), ',')
             FROM UserTerritoryMapping utm
             WHERE utm.UserId = u.UserId
@@ -136,12 +143,24 @@ module.exports = {
         WHERE UserId = @UserId
         `
     },
+    DELETE_USER_STATE_MAPPINGS: () => {
+        return `
+            DELETE FROM UserStateMapping
+            WHERE UserId = @UserId
+        `;
+    },
     DELETE_USER: () => {
         return `
         DELETE FROM Users
         WHERE UserId = @UserId
         `
     }, 
+    DELETE_USER_TERRITORY_MAPPINGS: () => {
+        return `
+            DELETE FROM UserTerritoryMapping
+            WHERE UserId = @UserId
+        `;
+    },
     GET_USER_BY_ID: () => {
         return `
         SELECT

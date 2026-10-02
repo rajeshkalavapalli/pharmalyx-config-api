@@ -141,7 +141,11 @@ exports.getAreasById = async (AreaId) => {
 
 exports.updateArea = async (AreaId, updateData) => {
     try{
-        const result = await AreaDA.updateArea(AreaId, updateData);
+        const areaData ={
+            ...updateData,
+            modifiedOn: new Date()
+        }
+        const result = await AreaDA.updateArea(AreaId, areaData);
         return result;
     }catch(err){
         console.log("error in update area", err)

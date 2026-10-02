@@ -47,8 +47,37 @@ exports.getUsers = async () => {
     return await customQuery(sql.GET_USERS());
 };
 
-exports.updateUser = async (updatedUser) => {
-    await customQuery(sql.UPDATE_USER(), updatedUser);
+exports.updateUser = async (updatedUser, stateIds = [], territoryIds = [], countryId) => {
+    const queries = [
+        {
+            sqlQuery: sql.UPDATE_USER(),
+            inputs: updatedUser,
+        },
+        {
+            sqlQuery: sql.DELETE_USER_STATE_MAPPINGS(),
+            inputs: { UserId: updatedUser.UserId },
+        },
+        {
+            sqlQuery: sql.DELETE_USER_TERRITORY_MAPPINGS(),
+            inputs: { UserId: updatedUser.UserId },
+        },
+        ...stateIds.map((StateId) => ({
+            sqlQuery: sql.CREATE_USER_STATE_MAPPING(),
+            inputs: {
+                UserId: updatedUser.UserId,
+                StateId,
+            },
+        })),
+        ...territoryIds.map((TerritoryId) => ({
+            sqlQuery: sql.CREATE_USER_TERRITORY_MAPPING(),
+            inputs: {
+                UserId: updatedUser.UserId,
+                TerritoryId,
+            },
+        })),
+    ];
+
+    await runInTransaction(queries);
 
     return {
         success: true,
@@ -57,7 +86,7 @@ exports.updateUser = async (updatedUser) => {
         UserName: updatedUser.UserName,
         DesignationId: updatedUser.DesignationId,
         DivisionId: updatedUser.DivisionId,
-        CountryId: updatedUser.CountryId,
+        CountryId: countryId,
     };
 };
 
