@@ -20,6 +20,12 @@ const userDoctorMapping = require('./controllers/UserDoctorMapping')
 
 const Pharmacy = require('./controllers/Pharmacy')
 
+const StockistRoutes = require('./controllers/Stockist');
+
+const userStockistMapping = require('./controllers/UserStockistMapping');
+
+const userPharmacyMapping = require('./controllers/UserPharmacyMapping');
+
 const { poolPromise } = require('./db');
 
 app.use(express.json());
@@ -34,6 +40,9 @@ app.use('/app', userAreaMaping)
 app.use('/app', doctorRoutes)
 app.use('/app', userDoctorMapping)
 app.use('/app', Pharmacy)
+app.use('/app', StockistRoutes)
+app.use('/app', userStockistMapping)
+app.use('/app', userPharmacyMapping)
 
 
 

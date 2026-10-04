@@ -12,5 +12,5 @@ router.get('/get-user-doctor-mappings', userDoctorMappingHandler.getUserDoctorMa
 router.put('/update-user-doctor-mapping', userDoctorMappingHandler.updateUserDoctorMapping)
 router.get('/get-user-doctor-mapping-by-id/:userId', userDoctorMappingHandler.getUserDoctorMappingById)
 router.get('/get-user-doctor-mapping-by-user-id/:userId', userDoctorMappingHandler.getUserDoctorMappingByUserId)
-
+router.delete('/delete-user-doctor-mappings', userDoctorMappingHandler.deleteUserDoctorMappings)    
 module.exports = router

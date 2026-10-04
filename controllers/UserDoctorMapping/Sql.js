@@ -1,5 +1,5 @@
 module.exports = {
-	DELETE_USER_MAPPINGS: () => {
+	DELETE_USER_DOCTOR_MAPPINGS: () => {
 		return `
 			DELETE FROM dbo.UserDoctorMapping
 			WHERE UserId = @UserId
@@ -31,7 +31,7 @@ module.exports = {
 		`;
 	},
 
-	CREATE_USER_MAPPING: () => {
+	CREATE_USER_DOCTOR_MAPPING: () => {
 		return `
 			INSERT INTO dbo.UserDoctorMapping (
 				UserDoctorMappingId,
@@ -49,7 +49,7 @@ module.exports = {
 			)
 		`;
 	},
-	UPDATE_USER_MAPPING: () => {
+	UPDATE_USER_DOCTOR_MAPPING: () => {
 		return `
 			UPDATE dbo.UserDoctorMapping
 			SET DoctorId = @DoctorId,
@@ -79,7 +79,7 @@ module.exports = {
 			INNER JOIN dbo.Doctor doc ON doc.DoctorId = m.DoctorId
 			LEFT JOIN Territory t ON t.TerritoryId = doc.TerritoryId
 			LEFT JOIN Areas a ON a.AreaId = doc.AreaId
-			WHERE m.UserDoctorMappingId = @UserId
+			WHERE m.UserDoctorMappingId = @UserDoctorMappingId
 		`;
 	},
 	GET_USER_DOCTOR_MAPPING_BY_USER_ID: () => {

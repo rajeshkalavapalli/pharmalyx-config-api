@@ -58,7 +58,11 @@ exports.getDoctorById = async (doctorId) => {
 
 exports.updateDoctor = async (doctorId, updatedDoctor) => {
     try {
-        return await DoctorDA.updateDoctor(doctorId, updatedDoctor);
+        const DoctorUpdate = {
+            ...updatedDoctor,
+            ModifiedOn: new Date()
+        }
+        return await DoctorDA.updateDoctor(doctorId, DoctorUpdate);
     } catch (err) {
         console.log("error updating doctor", err)
         throw err;

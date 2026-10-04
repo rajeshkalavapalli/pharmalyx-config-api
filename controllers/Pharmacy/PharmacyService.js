@@ -40,7 +40,11 @@ exports.GetPharmacyById = async (pharmacyId) => {
 
 exports.UpdatePharmacy = async (pharmacyId, pharmacyPayload) => {
     try {
-        const updatedPharmacy = await PharmacyDA.UpdatePharmacy(pharmacyId, pharmacyPayload);
+        const pharmacyData = {
+            ...pharmacyPayload,
+            ModifiedOn: new Date(),
+        }; 
+        const updatedPharmacy = await PharmacyDA.UpdatePharmacy(pharmacyId, pharmacyData);
         return updatedPharmacy;
     } catch (err) {
         console.error("Error updating pharmacy in service:", err);
