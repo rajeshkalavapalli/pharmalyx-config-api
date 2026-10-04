@@ -14,9 +14,9 @@ exports.getDoctorById = async (doctorId) => {
     return await customQuery(sql.GET_DOCTOR_BY_ID(), [doctorId]);
 }
 
-exports.updateDoctor = async (doctorId, updatedDoctor) => {
+exports.updateDoctor = async (doctorId, DoctorUpdate) => {
     return await customQuery(sql.UPDATE_DOCTOR(),
-     {...updatedDoctor, DoctorId: doctorId});
+     {...DoctorUpdate, DoctorId: doctorId});
 }
 
 exports.deactivateDoctor = async (doctorId) => {

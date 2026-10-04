@@ -81,3 +81,18 @@ exports.getUserDoctorMappingByUserId = async (req, res) => {
         });
     }
 };
+
+exports.deleteUserDoctorMappings = async (req, res) => {
+    try {
+        const { userId } = req.body;
+        const result = await UserDoctorMappingService.deleteUserDoctorMappings(userId);
+
+        res.status(200).json(result);
+    } catch (err) {
+        console.error("error deleting user doctor mappings", err);
+        res.status(err.statusCode || 400).json({
+            success: false,
+            message: err.message || "Failed to delete user doctor mappings",
+        });
+    }
+};

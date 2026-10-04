@@ -43,3 +43,7 @@ exports.getUserDoctorMappingById = async (userId) => {
 exports.getUserDoctorMappingByUserId = async (userId) => {
 	return await UserDoctorMappingDA.getUserDoctorMappingByUserId(userId);
 };
+
+exports.deleteUserDoctorMappingByUserId = async (userId) => {
+	return await UserDoctorMappingDA.deleteUserDoctorMappings(userId);
+};
