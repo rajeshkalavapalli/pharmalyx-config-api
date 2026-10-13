@@ -44,7 +44,13 @@
 - Adeed stockist and pharmacy
 
 # V 1.0.11
-edit view delete for area, user, division, territoty
+
+- edit view delete for area, user, division, territoty
 
 # V 1.0.12
-fixed mapping pharmacy , stockist 
+
+- fixed mapping pharmacy , stockist 
+
+# V 1.0.13
+
+- Added Tour Plan for the users
