@@ -5,6 +5,8 @@ const router = express.Router();
 const Tourplan  = require('./TourPlanHandler');
 
 
+router.get('/tourplan/team', Tourplan.getTeamPlans);
+router.get('/tourplan/history', Tourplan.getPlanHistory);
 router.get('/tourplan', Tourplan.getTourPlan);
 router.post('/tourplan', Tourplan.createTourPlan);
 router.post('/tourplan/:tourPlanId/approve', Tourplan.approveTourPlan);

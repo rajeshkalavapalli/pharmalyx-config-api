@@ -84,7 +84,21 @@ exports.updateUser = async (updatedUser) => {
             ...userDetails
         } = updatedUser;
 
-        return await userDa.updateUser(userDetails, StateIds, TerritoryIds, CountryId);
+        // A blank password means "keep the current one".
+        const newPassword = typeof password === "string" ? password : "";
+        let passwordHash = null;
+
+        if (newPassword.length > 0) {
+            if (newPassword.length < 8) {
+                const error = new Error("Password must be at least 8 characters");
+                error.status = 400;
+                throw error;
+            }
+
+            passwordHash = await argon2.hash(newPassword);
+        }
+
+        return await userDa.updateUser(userDetails, StateIds, TerritoryIds, CountryId, passwordHash);
     } catch (err) {
         console.log("error updating the user", err);
         throw err;
@@ -107,4 +121,34 @@ exports.getUserById = async (userId) => {
         console.log("error fetching the user by ID", err);
         throw err;
     }
+};
+// Verifies credentials. The same message is returned for an unknown user and a
+// wrong password so usernames can't be probed.
+exports.login = async (login, password) => {
+    const fail = () => {
+        const error = new Error("Incorrect username or password.");
+        error.status = 401;
+        return error;
+    };
+
+    const user = await userDa.getLoginUser(String(login || "").trim());
+
+    if (!user || !user.PasswordHash || !password) throw fail();
+
+    let valid = false;
+
+    try {
+        valid = await argon2.verify(user.PasswordHash, String(password));
+    } catch {
+        valid = false;
+    }
+
+    if (!valid) throw fail();
+
+    return {
+        UserId: user.UserId,
+        UserName: user.UserName,
+        Name: user.Name,
+        DesignationName: user.DesignationName,
+    };
 };

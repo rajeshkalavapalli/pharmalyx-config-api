@@ -28,6 +28,28 @@ const userPharmacyMapping = require('./controllers/UserPharmacyMapping');
 
 const TourPlan = require('./controllers/TourPlan');
 
+const DeviationTourPlan = require('./controllers/DeviationTourPlan');
+
+const MyDoctors = require('./controllers/MyDoctors');
+
+const Visits = require('./controllers/Visits');
+
+const Dcr = require('./controllers/Dcr');
+
+const Configuration = require('./controllers/Configuration');
+
+const Dashboard = require('./controllers/Dashboard');
+
+const Catalogue = require('./controllers/Catalogue');
+
+const Stock = require('./controllers/Stock');
+
+const Rcpa = require('./controllers/Rcpa');
+
+const DoctorBusiness = require('./controllers/DoctorBusiness');
+
+const Feedback = require('./controllers/Feedback');
+
 const { poolPromise } = require('./db');
 
 app.use(express.json());
@@ -46,6 +68,17 @@ app.use('/app', StockistRoutes)
 app.use('/app', userStockistMapping)
 app.use('/app', userPharmacyMapping)
 app.use('/app', TourPlan)
+app.use('/app', DeviationTourPlan)
+app.use('/app', MyDoctors)
+app.use('/app', Visits)
+app.use('/app', Dcr)
+app.use('/app', Configuration)
+app.use('/app', Dashboard)
+app.use('/app', Catalogue)
+app.use('/app', Stock)
+app.use('/app', Rcpa)
+app.use('/app', DoctorBusiness)
+app.use('/app', Feedback)
 
 
 

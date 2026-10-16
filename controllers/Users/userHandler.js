@@ -92,3 +92,23 @@ exports.getUserById = async (req, res) => {
         });
     }
 };
+exports.login = async (req, res) => {
+    try {
+        const { login, password } = req.body || {};
+
+        if (!login || !password) {
+            return res.status(400).json({ message: "Enter your username and password." });
+        }
+
+        const user = await userService.login(login, password);
+
+        return res.status(200).json({ user });
+    } catch (err) {
+        if (err.status) {
+            return res.status(err.status).json({ message: err.message });
+        }
+
+        console.log("error signing in", err);
+        return res.status(500).json({ message: "Sign-in failed. Please try again." });
+    }
+};

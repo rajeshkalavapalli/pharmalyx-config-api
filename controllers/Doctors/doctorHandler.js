@@ -16,8 +16,8 @@ exports.createDoctor = async (req, res) => {
         res.status(201).json(result)
     } catch (err) {
         console.log("error creating doctor", err)
-        res.status(500).json({
-            message: "Failed to create doctor"
+        res.status(err.status || 500).json({
+            message: err.status ? err.message : "Failed to create doctor"
         });
     }
 }
@@ -57,8 +57,8 @@ exports.updateDoctor = async (req, res) => {
         res.status(200).json(result);
     } catch (err) {
         console.log("error updating doctor", err);
-        res.status(500).json({
-            message: "Failed to update doctor"
+        res.status(err.status || 500).json({
+            message: err.status ? err.message : "Failed to update doctor"
         });
     }
 }

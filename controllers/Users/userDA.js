@@ -47,12 +47,16 @@ exports.getUsers = async () => {
     return await customQuery(sql.GET_USERS());
 };
 
-exports.updateUser = async (updatedUser, stateIds = [], territoryIds = [], countryId) => {
+exports.updateUser = async (updatedUser, stateIds = [], territoryIds = [], countryId, passwordHash = null) => {
     const queries = [
         {
             sqlQuery: sql.UPDATE_USER(),
             inputs: updatedUser,
         },
+        // Only when a new password was entered; otherwise the current one stays.
+        ...(passwordHash
+            ? [{ sqlQuery: sql.UPDATE_USER_PASSWORD(), inputs: { UserId: updatedUser.UserId, PasswordHash: passwordHash } }]
+            : []),
         {
             sqlQuery: sql.DELETE_USER_STATE_MAPPINGS(),
             inputs: { UserId: updatedUser.UserId },
@@ -113,3 +117,8 @@ exports.getUserById = async (userId) => {
     const result = await customQuery(sql.GET_USER_BY_ID(), { UserId: userId });
     return result[0] || null;
 };  
+
+exports.getLoginUser = async (login) => {
+    const result = await customQuery(sql.GET_LOGIN_USER(), { Login: login });
+    return result[0] || null;
+};

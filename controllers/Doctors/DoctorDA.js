@@ -11,7 +11,7 @@ exports.getDoctors = async () => {
 }
 
 exports.getDoctorById = async (doctorId) => {
-    return await customQuery(sql.GET_DOCTOR_BY_ID(), [doctorId]);
+    return await customQuery(sql.GET_DOCTOR_BY_ID(), { DoctorId: doctorId });
 }
 
 exports.updateDoctor = async (doctorId, DoctorUpdate) => {
