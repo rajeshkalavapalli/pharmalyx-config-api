@@ -10,6 +10,7 @@ router.get('/get-users',userHandler.getUsers);
 router.put('/update-user', userHandler.updateUser);
 router.delete('/delete-user/:userId', userHandler.deleteUser);
 router.get('/get-user/:userId', userHandler.getUserById);
+router.post('/login', userHandler.login);
 
 
 

@@ -103,8 +103,20 @@ const normalizeDetails = async (monthStart, rawDetails, submit) => {
             throw fail(400, `Invalid day type for ${planDate}.`);
         }
 
+        const remarks = String(detail.Remarks ?? '').trim();
+
+        if (remarks.length > 200) {
+            throw fail(400, `Remarks for ${planDate} cannot exceed 200 characters.`);
+        }
+
         if (detail.DayType === 'non-working') {
-            return { PlanDate: planDate, DayType: detail.DayType, TerritoryId: null, AreaId: null };
+            return {
+                PlanDate: planDate,
+                DayType: detail.DayType,
+                TerritoryId: null,
+                AreaId: null,
+                Remarks: remarks || null,
+            };
         }
 
         const territoryId = detail.TerritoryId || null;
@@ -130,7 +142,13 @@ const normalizeDetails = async (monthStart, rawDetails, submit) => {
             throw fail(400, `Territory and area are required for ${planDate}.`);
         }
 
-        return { PlanDate: planDate, DayType: detail.DayType, TerritoryId: territoryId, AreaId: areaId };
+        return {
+            PlanDate: planDate,
+            DayType: detail.DayType,
+            TerritoryId: territoryId,
+            AreaId: areaId,
+            Remarks: remarks || null,
+        };
     });
 
     if (submit) {
@@ -154,19 +172,32 @@ exports.getTourPlan = async (actingUserId, userId, planMonth) => {
 
     const targetUserId = userId || actingUserId;
     const monthStart = toMonthStart(planMonth);
-    const plan = await TourPlanDA.getTourPlanByUserMonth(targetUserId, monthStart);
-    const statuses = await getStatuses();
+    const [plan, statuses, ownerRow] = await Promise.all([
+        TourPlanDA.getTourPlanByUserMonth(targetUserId, monthStart),
+        getStatuses(),
+        TourPlanDA.getOwner(targetUserId),
+    ]);
+
+    if (!ownerRow) {
+        throw fail(404, 'User not found.');
+    }
+
+    // Only the owner or their reporting manager may see a plan.
+    if (!sameId(targetUserId, actingUserId) && !sameId(ownerRow.ManagerId, actingUserId)) {
+        throw fail(403, 'You are not allowed to view this tour plan.');
+    }
+
+    const owner = {
+        UserId: ownerRow.UserId,
+        Name: ownerRow.Name,
+        DesignationName: ownerRow.DesignationName,
+        ManagerId: ownerRow.ManagerId,
+        ManagerName: ownerRow.ManagerId ? ownerRow.ManagerName : null,
+        isSelf: sameId(ownerRow.UserId, actingUserId),
+    };
 
     if (!plan) {
-        if (!sameId(targetUserId, actingUserId)) {
-            const target = await TourPlanDA.getUser(targetUserId);
-
-            if (!target || !sameId(target.ManagerId, actingUserId)) {
-                throw fail(403, 'You are not allowed to view this tour plan.');
-            }
-        }
-
-        return { plan: null };
+        return { plan: null, owner };
     }
 
     const isOwner = sameId(plan.UserId, actingUserId);
@@ -186,10 +217,102 @@ exports.getTourPlan = async (actingUserId, userId, planMonth) => {
             PlanMonth: monthStart,
             StatusId: plan.StatusId,
             Status: status,
+            CreatedOn: plan.CreatedOn,
+            ModifiedOn: plan.ModifiedOn,
+            SubmittedOn: plan.SubmittedOn,
+            ReviewedOn: plan.ReviewedOn,
+            ReviewedByName: plan.ReviewedByName || null,
+            ReviewRemarks: plan.ReviewRemarks,
             details,
             canEdit: isOwner && (status === 'DRAFT' || status === 'REJECTED'),
             canApprove: isManager && !isOwner && status === 'SUBMITTED',
         },
+        owner,
+    };
+};
+
+// =========================================================
+// MANAGER: direct reports' plans for a month
+// =========================================================
+
+const REVIEW_ORDER = { SUBMITTED: 0, REJECTED: 1, DRAFT: 2, NEW: 3, APPROVED: 4 };
+
+exports.getTeamPlans = async (actingUserId, planMonth) => {
+    requireActingUser(actingUserId);
+
+    const monthStart = toMonthStart(planMonth);
+    const totalDays = daysInMonth(monthStart).length;
+    const [rows, statuses] = await Promise.all([
+        TourPlanDA.getTeamPlans(actingUserId, monthStart),
+        getStatuses(),
+    ]);
+
+    const plans = rows
+        .map((row) => {
+            const status = row.TourPlanId ? statusKey(statuses, row.StatusId) || 'DRAFT' : 'NEW';
+
+            return {
+                UserId: row.UserId,
+                Name: row.Name,
+                DesignationName: row.DesignationName,
+                TourPlanId: row.TourPlanId || null,
+                Status: status,
+                DaysPlanned: Number(row.DaysPlanned) || 0,
+                WorkingDays: Number(row.WorkingDays) || 0,
+                TotalDays: totalDays,
+                SubmittedOn: row.SubmittedOn,
+                ReviewedOn: row.ReviewedOn,
+                canApprove: status === 'SUBMITTED',
+            };
+        })
+        .sort((a, b) => REVIEW_ORDER[a.Status] - REVIEW_ORDER[b.Status] || a.Name.localeCompare(b.Name));
+
+    const count = (status) => plans.filter((plan) => plan.Status === status).length;
+
+    return {
+        month: monthStart,
+        summary: {
+            reports: plans.length,
+            awaitingReview: count('SUBMITTED'),
+            approved: count('APPROVED'),
+            returned: count('REJECTED'),
+            inProgress: count('DRAFT') + count('NEW'),
+        },
+        plans,
+    };
+};
+
+// =========================================================
+// HISTORY: a user's recent months (self, or a direct report)
+// =========================================================
+
+exports.getPlanHistory = async (actingUserId, userId) => {
+    requireActingUser(actingUserId);
+
+    const targetUserId = userId || actingUserId;
+
+    if (!sameId(targetUserId, actingUserId)) {
+        const target = await TourPlanDA.getUser(targetUserId);
+
+        if (!target || !sameId(target.ManagerId, actingUserId)) {
+            throw fail(403, 'You are not allowed to view these tour plans.');
+        }
+    }
+
+    const [rows, statuses] = await Promise.all([TourPlanDA.getPlanHistory(targetUserId), getStatuses()]);
+
+    return {
+        history: rows.map((row) => ({
+            TourPlanId: row.TourPlanId,
+            PlanMonth: row.PlanMonth,
+            Status: statusKey(statuses, row.StatusId) || 'DRAFT',
+            DaysPlanned: Number(row.DaysPlanned) || 0,
+            TotalDays: daysInMonth(row.PlanMonth).length,
+            SubmittedOn: row.SubmittedOn,
+            ReviewedOn: row.ReviewedOn,
+            ReviewedByName: row.ReviewedByName,
+            ReviewRemarks: row.ReviewRemarks,
+        })),
     };
 };
 
@@ -227,6 +350,7 @@ exports.saveTourPlan = async (actingUserId, tourPlanPayload) => {
                 UserId: actingUserId,
                 PlanMonth: monthStart,
                 StatusId: targetStatusId,
+                SubmittedOn: submit ? now : null,
                 CreatedOn: now,
                 ModifiedOn: null,
                 details,
@@ -250,6 +374,7 @@ exports.saveTourPlan = async (actingUserId, tourPlanPayload) => {
             StatusId: targetStatusId,
             DraftStatusId: statuses.DRAFT,
             RejectedStatusId: statuses.REJECTED,
+            SubmittedOn: submit ? now : null,
             ModifiedOn: now,
             details,
         });
@@ -260,8 +385,18 @@ exports.saveTourPlan = async (actingUserId, tourPlanPayload) => {
     }
 };
 
-const decide = async (actingUserId, tourPlanId, outcome) => {
+const decide = async (actingUserId, tourPlanId, outcome, remarks) => {
     requireActingUser(actingUserId);
+
+    const reviewRemarks = String(remarks ?? '').trim();
+
+    if (reviewRemarks.length > 1000) {
+        throw fail(400, 'Remarks cannot exceed 1000 characters.');
+    }
+
+    if (outcome === 'REJECTED' && !reviewRemarks) {
+        throw fail(400, 'Remarks are required when rejecting a tour plan.');
+    }
 
     const plan = await TourPlanDA.getTourPlanById(tourPlanId);
 
@@ -285,6 +420,8 @@ const decide = async (actingUserId, tourPlanId, outcome) => {
             FromStatusId: statuses.SUBMITTED,
             StatusId: statuses[outcome],
             ModifiedOn: new Date(),
+            ReviewedBy: actingUserId,
+            ReviewRemarks: reviewRemarks || null,
         });
     } catch (err) {
         throw mapDbError(err);
@@ -293,6 +430,8 @@ const decide = async (actingUserId, tourPlanId, outcome) => {
     return { TourPlanId: plan.TourPlanId, Status: outcome };
 };
 
-exports.approveTourPlan = (actingUserId, tourPlanId) => decide(actingUserId, tourPlanId, 'APPROVED');
+exports.approveTourPlan = (actingUserId, tourPlanId, remarks) =>
+    decide(actingUserId, tourPlanId, 'APPROVED', remarks);
 
-exports.rejectTourPlan = (actingUserId, tourPlanId) => decide(actingUserId, tourPlanId, 'REJECTED');
+exports.rejectTourPlan = (actingUserId, tourPlanId, remarks) =>
+    decide(actingUserId, tourPlanId, 'REJECTED', remarks);

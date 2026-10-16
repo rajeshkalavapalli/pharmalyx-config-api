@@ -42,7 +42,11 @@ exports.createTourPlan = async (req, res) => {
 
 exports.approveTourPlan = async (req, res) => {
     try {
-        const result = await TourPlanService.approveTourPlan(actingUser(req), req.params.tourPlanId);
+        const result = await TourPlanService.approveTourPlan(
+            actingUser(req),
+            req.params.tourPlanId,
+            req.body?.remarks
+        );
 
         return res.status(200).json({ message: 'Tour plan approved.', data: result });
     } catch (error) {
@@ -52,10 +56,34 @@ exports.approveTourPlan = async (req, res) => {
 
 exports.rejectTourPlan = async (req, res) => {
     try {
-        const result = await TourPlanService.rejectTourPlan(actingUser(req), req.params.tourPlanId);
+        const result = await TourPlanService.rejectTourPlan(
+            actingUser(req),
+            req.params.tourPlanId,
+            req.body?.remarks
+        );
 
         return res.status(200).json({ message: 'Tour plan rejected.', data: result });
     } catch (error) {
         return respond(res, 'reject tour plan')(error);
+    }
+};
+
+exports.getTeamPlans = async (req, res) => {
+    try {
+        const result = await TourPlanService.getTeamPlans(actingUser(req), req.query.planMonth);
+
+        return res.status(200).json(result);
+    } catch (error) {
+        return respond(res, 'load team tour plans')(error);
+    }
+};
+
+exports.getPlanHistory = async (req, res) => {
+    try {
+        const result = await TourPlanService.getPlanHistory(actingUser(req), req.query.userId);
+
+        return res.status(200).json(result);
+    } catch (error) {
+        return respond(res, 'load tour plan history')(error);
     }
 };

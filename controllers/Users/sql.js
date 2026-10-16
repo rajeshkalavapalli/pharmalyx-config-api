@@ -1,4 +1,19 @@
 module.exports = {
+    // Sign-in lookup by username or email (case-insensitive by collation).
+    GET_LOGIN_USER: () => {
+        return `
+            SELECT TOP (1)
+                u.UserId,
+                u.UserName,
+                COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(u.FirstName, ' ', u.LastName))), ''), u.UserName) AS Name,
+                u.PasswordHash,
+                sld.SystemLovDetailName AS DesignationName
+            FROM Users u
+            LEFT JOIN SystemLovDetails sld ON sld.SystemLovDetailId = u.DesignationId
+            WHERE u.UserName = @Login OR u.EmailId = @Login
+        `;
+    },
+
     GET_USERS: () => {
         return `select 
         u.UserId AS userId ,
@@ -139,6 +154,14 @@ module.exports = {
             DesignationId = @DesignationId,
             DivisionId = @DivisionId,
             ManagerId = @ManagerId,
+            ModifiedOn = GETDATE()
+        WHERE UserId = @UserId
+        `
+    },
+    UPDATE_USER_PASSWORD: () => {
+        return `
+        UPDATE Users
+        SET PasswordHash = @PasswordHash,
             ModifiedOn = GETDATE()
         WHERE UserId = @UserId
         `

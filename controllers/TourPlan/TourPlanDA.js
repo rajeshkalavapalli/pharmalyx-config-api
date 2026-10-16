@@ -44,13 +44,14 @@ exports.updateTourPlan = async ({
     StatusId,
     DraftStatusId,
     RejectedStatusId,
+    SubmittedOn,
     ModifiedOn,
     details,
 }) => {
     return await runInTransaction([
         {
             sqlQuery: sql.UPDATE_EDITABLE_TOUR_PLAN(),
-            inputs: { TourPlanId, StatusId, DraftStatusId, RejectedStatusId, ModifiedOn },
+            inputs: { TourPlanId, StatusId, DraftStatusId, RejectedStatusId, SubmittedOn, ModifiedOn },
         },
         {
             sqlQuery: sql.DELETE_TOUR_PLAN_DETAILS(),
@@ -64,3 +65,11 @@ exports.transitionStatus = async (inputs) =>
     await runInTransaction([
         { sqlQuery: sql.TRANSITION_TOUR_PLAN_STATUS(), inputs },
     ]);
+
+exports.getOwner = async (UserId) =>
+    (await customQuery(sql.GET_OWNER(), { UserId }))[0] || null;
+
+exports.getTeamPlans = (ManagerId, PlanMonth) =>
+    customQuery(sql.GET_TEAM_PLANS(), { ManagerId, PlanMonth });
+
+exports.getPlanHistory = (UserId) => customQuery(sql.GET_PLAN_HISTORY(), { UserId });

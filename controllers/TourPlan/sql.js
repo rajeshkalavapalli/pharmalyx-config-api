@@ -19,6 +19,63 @@ module.exports = {
         `;
     },
 
+    // Who owns a plan and who approves it.
+    GET_OWNER: () => {
+        return `
+            SELECT
+                u.UserId,
+                COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(u.FirstName, ' ', u.LastName))), ''), u.UserName) AS Name,
+                sld.SystemLovDetailName AS DesignationName,
+                u.ManagerId,
+                COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(m.FirstName, ' ', m.LastName))), ''), m.UserName) AS ManagerName
+            FROM Users u
+            LEFT JOIN Users m ON m.UserId = u.ManagerId
+            LEFT JOIN SystemLovDetails sld ON sld.SystemLovDetailId = u.DesignationId
+            WHERE u.UserId = @UserId
+        `;
+    },
+
+    // Every direct report with their plan (if any) for the month.
+    GET_TEAM_PLANS: () => {
+        return `
+            SELECT
+                u.UserId,
+                COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(u.FirstName, ' ', u.LastName))), ''), u.UserName) AS Name,
+                sld.SystemLovDetailName AS DesignationName,
+                tp.TourPlanId,
+                tp.StatusId,
+                tp.SubmittedOn,
+                tp.ReviewedOn,
+                (SELECT COUNT(*) FROM dbo.TourPlanDetails d WHERE d.TourPlanId = tp.TourPlanId) AS DaysPlanned,
+                (SELECT COUNT(*) FROM dbo.TourPlanDetails d
+                 WHERE d.TourPlanId = tp.TourPlanId AND d.DayType = 'working') AS WorkingDays
+            FROM Users u
+            LEFT JOIN SystemLovDetails sld ON sld.SystemLovDetailId = u.DesignationId
+            LEFT JOIN dbo.TourPlan tp ON tp.UserId = u.UserId AND tp.PlanMonth = @PlanMonth
+            WHERE u.ManagerId = @ManagerId
+            ORDER BY Name
+        `;
+    },
+
+    // A user's plans, newest month first.
+    GET_PLAN_HISTORY: () => {
+        return `
+            SELECT TOP (12)
+                tp.TourPlanId,
+                CONVERT(VARCHAR(10), tp.PlanMonth, 23) AS PlanMonth,
+                tp.StatusId,
+                tp.SubmittedOn,
+                tp.ReviewedOn,
+                tp.ReviewRemarks,
+                COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(rv.FirstName, ' ', rv.LastName))), ''), rv.UserName) AS ReviewedByName,
+                (SELECT COUNT(*) FROM dbo.TourPlanDetails d WHERE d.TourPlanId = tp.TourPlanId) AS DaysPlanned
+            FROM dbo.TourPlan tp
+            LEFT JOIN Users rv ON rv.UserId = tp.ReviewedBy
+            WHERE tp.UserId = @UserId
+            ORDER BY tp.PlanMonth DESC
+        `;
+    },
+
     GET_TOUR_PLAN_BY_USER_MONTH: () => {
         return `
             SELECT
@@ -26,9 +83,16 @@ module.exports = {
                 tp.UserId,
                 tp.PlanMonth,
                 tp.StatusId,
-                u.ManagerId
+                u.ManagerId,
+                tp.CreatedOn,
+                tp.ModifiedOn,
+                tp.SubmittedOn,
+                tp.ReviewedOn,
+                tp.ReviewRemarks,
+                COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(rv.FirstName, ' ', rv.LastName))), ''), rv.UserName) AS ReviewedByName
             FROM dbo.TourPlan tp
             INNER JOIN Users u ON u.UserId = tp.UserId
+            LEFT JOIN Users rv ON rv.UserId = tp.ReviewedBy
             WHERE tp.UserId = @UserId
               AND tp.PlanMonth = @PlanMonth
         `;
@@ -57,7 +121,8 @@ module.exports = {
                 d.TerritoryId,
                 t.TerritoryName,
                 d.AreaId,
-                a.AreaName
+                a.AreaName,
+                d.Remarks
             FROM dbo.TourPlanDetails d
             LEFT JOIN Territory t ON t.TerritoryId = d.TerritoryId
             LEFT JOIN Areas a ON a.AreaId = d.AreaId
@@ -90,7 +155,12 @@ module.exports = {
         return `
             UPDATE dbo.TourPlan
             SET StatusId = @StatusId,
-                ModifiedOn = @ModifiedOn
+                ModifiedOn = @ModifiedOn,
+                -- A (re)submission starts a fresh review cycle.
+                SubmittedOn = CASE WHEN @SubmittedOn IS NULL THEN SubmittedOn ELSE @SubmittedOn END,
+                ReviewedBy = CASE WHEN @SubmittedOn IS NULL THEN ReviewedBy ELSE NULL END,
+                ReviewedOn = CASE WHEN @SubmittedOn IS NULL THEN ReviewedOn ELSE NULL END,
+                ReviewRemarks = CASE WHEN @SubmittedOn IS NULL THEN ReviewRemarks ELSE NULL END
             WHERE TourPlanId = @TourPlanId
               AND StatusId IN (@DraftStatusId, @RejectedStatusId);
 
@@ -103,7 +173,10 @@ module.exports = {
         return `
             UPDATE dbo.TourPlan
             SET StatusId = @StatusId,
-                ModifiedOn = @ModifiedOn
+                ModifiedOn = @ModifiedOn,
+                ReviewedBy = @ReviewedBy,
+                ReviewedOn = @ModifiedOn,
+                ReviewRemarks = @ReviewRemarks
             WHERE TourPlanId = @TourPlanId
               AND StatusId = @FromStatusId;
 
@@ -126,6 +199,7 @@ module.exports = {
                 UserId,
                 PlanMonth,
                 StatusId,
+                SubmittedOn,
                 CreatedOn,
                 ModifiedOn
             )
@@ -134,6 +208,7 @@ module.exports = {
                 @UserId,
                 @PlanMonth,
                 @StatusId,
+                @SubmittedOn,
                 @CreatedOn,
                 @ModifiedOn
             )
@@ -148,6 +223,7 @@ module.exports = {
                 DayType,
                 TerritoryId,
                 AreaId,
+                Remarks,
                 CreatedOn,
                 ModifiedOn
             )
@@ -157,6 +233,7 @@ module.exports = {
                 @DayType,
                 @TerritoryId,
                 @AreaId,
+                @Remarks,
                 @CreatedOn,
                 @ModifiedOn
             )
