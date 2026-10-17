@@ -73,6 +73,40 @@ module.exports = {
         `;
     },
 
+    // Approved, still-provisional doctors assigned in scope whose verification deadline has passed.
+    OVERDUE_VERIFICATION: () => {
+        return `
+            ${SCOPE_CTE}
+            SELECT DISTINCT
+                m.UserId,
+                ${displayName('u')} AS EmployeeName,
+                d.DoctorId,
+                d.DoctorName,
+                d.Category,
+                CONVERT(VARCHAR(10), d.VerificationDueOn, 23) AS DueOn
+            FROM Scope s
+            INNER JOIN dbo.UserDoctorMapping m ON m.UserId = s.UserId AND ISNULL(m.IsActive, 'Yes') <> 'No'
+            INNER JOIN Users u ON u.UserId = m.UserId
+            INNER JOIN dbo.Doctor d ON d.DoctorId = m.DoctorId AND ISNULL(d.IsActive, 'Yes') <> 'No'
+            WHERE d.VerificationStatus = 'PROVISIONAL' AND d.ApprovalStatus = 'APPROVED'
+              AND d.VerificationDueOn < @Today AND ${IN_SCOPE('m.UserId')}
+        `;
+    },
+
+    // GPS fraud flags written at visit time, for people in scope.
+    GPS_FLAGS: () => {
+        return `
+            ${SCOPE_CTE}
+            SELECT f.FlagId, f.FlagType, f.Severity, f.UserId, ${displayName('u')} AS EmployeeName, f.DoctorId, d.DoctorName,
+                   f.VisitId, f.Details, f.CreatedOn
+            FROM Scope s
+            INNER JOIN dbo.FraudFlags f ON f.UserId = s.UserId
+            INNER JOIN Users u ON u.UserId = f.UserId
+            LEFT JOIN dbo.Doctor d ON d.DoctorId = f.DoctorId
+            WHERE f.CreatedOn >= @Since AND ${IN_SCOPE('f.UserId')}
+        `;
+    },
+
     NEGATIVE_FEEDBACK: () => {
         return `
             ${SCOPE_CTE}

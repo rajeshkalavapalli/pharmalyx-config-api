@@ -6,8 +6,8 @@ exports.createDoctor = async (newDoctor) => {
     return await customQuery(sql.CREATE_DOCTOR(), newDoctor);
 }
 
-exports.getDoctors = async () => {
-    return await customQuery(sql.GET_DOCTORS());
+exports.getDoctors = async (scope = null) => {
+    return await customQuery(sql.GET_DOCTORS(Boolean(scope)), scope || {});
 }
 
 exports.getDoctorById = async (doctorId) => {
@@ -21,4 +21,7 @@ exports.updateDoctor = async (doctorId, DoctorUpdate) => {
 
 exports.deactivateDoctor = async (doctorId) => {
     return await customQuery(sql.DEACTIVATE_DOCTOR(), { DoctorId: doctorId });
-}   
+}
+
+exports.isDoctorInScope = async (DoctorId, ActingUserId) =>
+    (await customQuery(sql.DOCTOR_IN_SCOPE(), { DoctorId, ActingUserId, ViewAll: 0 })).length > 0;

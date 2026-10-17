@@ -22,6 +22,15 @@ const RULES = [
         labels: ['Negative calls', 'Within days'],
     },
     {
+        code: 'DOCTOR_VERIFICATION_OVERDUE',
+        group: 'DOCTOR',
+        title: 'Doctor verification overdue',
+        description: 'A provisional doctor was not verified before the deadline.',
+        t1: 15,
+        t2: null,
+        labels: ['Days overdue that count as high'],
+    },
+    {
         code: 'DOCTOR_RX_SHARE_DROP',
         group: 'DOCTOR',
         title: 'Rx share dropping',
@@ -87,6 +96,54 @@ const RULES = [
         labels: ['Achievement below %'],
     },
 
+    // GPS & location (flags written when visits are logged; t1 = how many days of flags to show)
+    {
+        code: 'GPS_OUTSIDE_GEOFENCE',
+        group: 'GPS',
+        title: 'Check-in away from the clinic',
+        description: 'A visit was logged outside the allowed distance from the doctor\'s saved clinic.',
+        t1: 30,
+        t2: null,
+        labels: ['Show flags from the last (days)'],
+    },
+    {
+        code: 'GPS_SAME_SPOT',
+        group: 'GPS',
+        title: 'Many clinics, one spot',
+        description: 'Visits to doctors with different clinics were checked in from the same place.',
+        t1: 30,
+        t2: null,
+        labels: ['Show flags from the last (days)'],
+    },
+    {
+        code: 'GPS_IMPOSSIBLE_TRAVEL',
+        group: 'GPS',
+        title: 'Impossible travel',
+        description: 'Two check-ins too far apart for the time between them.',
+        t1: 30,
+        t2: null,
+        labels: ['Show flags from the last (days)'],
+    },
+    {
+        code: 'GPS_MOCK',
+        group: 'GPS',
+        title: 'Fake (mock) GPS',
+        description: 'The phone reported a mock location app (Android app).',
+        t1: 30,
+        t2: null,
+        labels: ['Show flags from the last (days)'],
+    },
+    {
+        code: 'GPS_NO_GPS',
+        group: 'GPS',
+        title: 'Visit without GPS',
+        description: 'A visit to a doctor with a pinned clinic was logged with location off. Off by default (often innocent).',
+        t1: 30,
+        t2: null,
+        labels: ['Show flags from the last (days)'],
+        defaultEnabled: false,
+    },
+
     // Business / stock
     {
         code: 'STOCK_OUT',
@@ -130,6 +187,7 @@ const GROUPS = {
     DOCTOR: 'Doctor risk',
     REP: 'Rep performance',
     STOCK: 'Business & stock',
+    GPS: 'GPS & location',
 };
 
 // Defaults merged with saved overrides: [{ ...rule, enabled, t1, t2, customised }]
@@ -142,7 +200,7 @@ const mergeRules = (overrides = []) => {
         return {
             ...rule,
             groupLabel: GROUPS[rule.group],
-            enabled: saved ? Boolean(saved.IsEnabled) : true,
+            enabled: saved ? Boolean(saved.IsEnabled) : rule.defaultEnabled !== false,
             t1: saved?.Threshold1 != null && rule.t1 != null ? Number(saved.Threshold1) : rule.t1,
             t2: saved?.Threshold2 != null && rule.t2 != null ? Number(saved.Threshold2) : rule.t2,
             defaults: { t1: rule.t1, t2: rule.t2 },

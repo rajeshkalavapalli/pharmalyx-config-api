@@ -98,10 +98,14 @@ const buildAlerts = async (inputs, rules) => {
     const notVisited = on('DOCTOR_NOT_VISITED');
     const negative = on('DOCTOR_NEGATIVE_FEEDBACK');
     const rxDrop = on('DOCTOR_RX_SHARE_DROP');
+    const overdueRule = on('DOCTOR_VERIFICATION_OVERDUE');
+    const GPS_RULES = { OUTSIDE_GEOFENCE: 'GPS_OUTSIDE_GEOFENCE', SAME_SPOT: 'GPS_SAME_SPOT', IMPOSSIBLE_TRAVEL: 'GPS_IMPOSSIBLE_TRAVEL', MOCK_GPS: 'GPS_MOCK', NO_GPS: 'GPS_NO_GPS' };
+    const gpsRules = Object.fromEntries(Object.entries(GPS_RULES).map(([type, code]) => [type, on(code)]).filter(([, rule]) => rule));
+    const gpsDays = Math.max(0, ...Object.values(gpsRules).map((rule) => rule.t1 || 30));
     const stockRules = [on('STOCK_OUT'), on('STOCK_LOW_COVER'), on('STOCK_OVERSTOCK')];
     const pobRule = on('POB_NOT_SUPPLIED');
 
-    const [keyDoctors, negatives, shares, reps, sales, stock, pending] = await Promise.all([
+    const [keyDoctors, negatives, shares, reps, sales, stock, pending, overdue, gpsFlags] = await Promise.all([
         notVisited ? InsightsDA.getKeyDoctorLastVisits(inputs) : [],
         negative ? InsightsDA.getNegativeFeedback({ ...inputs, Since: addDays(p.Today, -negative.t2) }) : [],
         rxDrop ? InsightsDA.getRcpaShares({ ...inputs, Since: addDays(p.Today, -180) }) : [],
@@ -109,6 +113,8 @@ const buildAlerts = async (inputs, rules) => {
         InsightsDA.getRepSales({ ...inputs, SalesFrom: todayKey(new Date(new Date().getFullYear(), new Date().getMonth() - 3, 1)) }),
         stockRules.some(Boolean) ? InsightsDA.getLatestStock(inputs) : [],
         pobRule ? InsightsDA.getPobPending({ ...inputs, Cutoff: addDays(p.Today, -pobRule.t1) }) : [],
+        overdueRule ? InsightsDA.getOverdueVerification({ ...inputs, Today: p.Today }) : [],
+        Object.keys(gpsRules).length ? InsightsDA.getGpsFlags({ ...inputs, Since: addDays(p.Today, -gpsDays) }) : [],
     ]);
 
     const alerts = [];
@@ -180,6 +186,42 @@ const buildAlerts = async (inputs, rules) => {
             );
         });
     }
+
+    if (overdueRule) {
+        overdue.forEach((row) => {
+            const late = daysBetween(row.DueOn, p.Today);
+            alerts.push(
+                alert(overdueRule, `${row.UserId}|${row.DoctorId}|${row.DueOn}`, {
+                    severity: late >= overdueRule.t1 ? 'HIGH' : 'MEDIUM',
+                    subject: `Dr. ${row.DoctorName}`,
+                    category: row.Category,
+                    employee: row.EmployeeName,
+                    detail: `Still provisional ${late} day(s) after the verification deadline (${row.DueOn}).`,
+                    since: row.DueOn,
+                    link: '/field-operation/doctor-requests',
+                })
+            );
+        });
+    }
+
+    // ---- GPS & location ----
+    gpsFlags.forEach((row) => {
+        const rule = gpsRules[row.FlagType];
+        if (!rule) return;
+        const createdOn = todayKey(new Date(row.CreatedOn));
+        if (createdOn < addDays(p.Today, -(rule.t1 || 30))) return;
+
+        alerts.push(
+            alert(rule, row.FlagId, {
+                severity: row.Severity,
+                subject: row.EmployeeName,
+                employee: row.EmployeeName,
+                detail: row.Details,
+                since: createdOn,
+                link: '/field-operation/visits',
+            })
+        );
+    });
 
     // ---- Rep performance ----
     const month = p.MonthStart.slice(0, 7);
@@ -325,7 +367,7 @@ exports.getAlerts = async (actingUserId, query) => {
             high: count((item) => item.status === 'OPEN' && item.severity === 'HIGH'),
             acknowledged: count((item) => item.status === 'ACKNOWLEDGED'),
             resolved: all.length - alerts.length,
-            byGroup: ['DOCTOR', 'REP', 'STOCK'].map((group) => ({ group, open: count((item) => item.group === group && item.status === 'OPEN') })),
+            byGroup: ['DOCTOR', 'REP', 'STOCK', 'GPS'].map((group) => ({ group, open: count((item) => item.group === group && item.status === 'OPEN') })),
         },
         rules: rules.map(({ code, title, group, groupLabel, enabled }) => ({ code, title, group, groupLabel, enabled })),
         alerts,

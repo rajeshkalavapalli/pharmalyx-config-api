@@ -174,3 +174,50 @@
 # V 1.0.43
 
 - Added HR apis (attendance check in / out and month status, leave types / balances / apply / approve / cancel, activity timeline, appraisal cycles with self and manager review and KPI based final score), leave in the approvals inbox, with permissions
+
+# V 1.0.44
+
+- Doctor verification phase 0 and 1: doctor create / edit / delete now need master permissions, admin doctor changes recorded in the audit log, database script for doctor status, clinic GPS, doctor requests with comments, evidence, verifications, duplicate and fraud flags
+
+# V 1.0.45
+
+- Added doctor requests apis (new doctor with GPS and photo, edit / delete with reason, primary manager approval with typed reason when flagged, audit log), duplicate detection (name normalising, fuzzy match, same speciality within 2 km, same phone / registration no., same GPS spot) with scan of existing doctors, and doctor requests in the approvals inbox
+
+# V 1.0.46
+
+- Added doctor verification apis (submit proof, primary manager accept / reject, joint visit verification only after a real visit, deadline extension with reason, audit log), verification proofs in the approvals inbox and doctor verification overdue alert in risk and alerts
+
+
+# V 1.0.47
+
+- Added GPS fraud checks when a visit is logged (distance from clinic with GPS accuracy allowance, same spot for many clinics, impossible travel, mock GPS, no GPS) saved as flags for the manager without blocking the visit, clinic location in my doctors and GPS and location rules in risk and alerts
+
+
+# V 1.0.48
+
+- Added resend of rejected doctor requests (only by the requester, once per rejection, not for confirmed duplicates), linked to the rejected request and saved in the audit log, rejected new doctor goes back to pending with the fixes, and a lock so a doctor never has two pending requests
+
+
+# V 1.0.49
+
+- Doctors list and doctor details open for anyone with my doctors view, limited to doctors assigned to or added by them and their team; admins with master data view still see all doctors; create, edit and delete stay admin only
+
+
+# V 1.0.50
+
+- Doctors list returns approval status and whether the doctor is assigned to the user, used to allow edit / delete requests only on own approved doctors
+
+
+# V 1.0.51
+
+- Doctor requests also carry country, state, date of birth and anniversary from the full doctor form (new doctor, edit and resend)
+
+
+# V 1.0.52
+
+- Doctor requests are approved by the requester's current primary manager (follows manager changes; admin when there is no manager), and approve / reject is shown only when the role has doctor requests approve
+
+
+# V 1.0.53
+
+- Doctor edit requests can change active / inactive status (applied after manager approval); new doctor requests always start active

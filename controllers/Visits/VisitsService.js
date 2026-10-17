@@ -1,4 +1,5 @@
 const VisitsDA = require('./VisitsDA');
+const { checkVisit } = require('./gpsChecks');
 const StockService = require('../Stock/StockService');
 
 // A planned call for this doctor and day becomes "visited". Missing table = no-op
@@ -309,6 +310,15 @@ exports.createVisit = async (actingUserId, payload) => {
 
     const location = normalizeLocation(payload.Location);
 
+    // GPS checks (flag only: never stops the visit being saved).
+    const geofenceReason = blank(payload.GeofenceReason) ? null : String(payload.GeofenceReason).trim().slice(0, 300);
+    let gps = { columns: { DistanceFromClinicM: null, GeofenceStatus: null, GeofenceReason: null, IsMockLocation: null }, flagQueries: [], flags: [] };
+    try {
+        gps = await checkVisit({ userId: actingUserId, visitId, doctor, location, isMock: payload.Location?.isMock === true, reason: geofenceReason });
+    } catch (error) {
+        console.error('GPS checks skipped for visit', visitId, error.message);
+    }
+
     // Tour plan check and system-detected deviation
     const plan = await VisitsDA.getPlannedForDate(
         actingUserId,
@@ -385,9 +395,10 @@ exports.createVisit = async (actingUserId, payload) => {
                 RecordedOffline: payload.RecordedOffline === true,
                 RecordedAt: optionalTimestamp(payload.RecordedAt) || now,
                 CreatedOn: now,
+                ...gps.columns,
             },
             deviation,
-            [...distribution, markPreCallVisited({ UserId: actingUserId, DoctorId: doctorId, VisitDate: visitDate, VisitId: visitId })]
+            [...distribution, markPreCallVisited({ UserId: actingUserId, DoctorId: doctorId, VisitDate: visitDate, VisitId: visitId }), ...gps.flagQueries]
         );
     } catch (error) {
         throw StockService.mapDbError(error);
@@ -398,5 +409,7 @@ exports.createVisit = async (actingUserId, payload) => {
         PlanStatus: planStatus,
         DeviationId: deviationId,
         deviationCreated: Boolean(deviation),
+        geofence: { status: gps.columns.GeofenceStatus, distance: gps.columns.DistanceFromClinicM },
+        gpsFlags: gps.flags.map((item) => ({ type: item.FlagType, severity: item.Severity, details: item.Details })),
     };
 };

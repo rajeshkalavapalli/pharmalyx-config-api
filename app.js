@@ -76,6 +76,10 @@ const Approvals = require('./controllers/Approvals');
 
 const HR = require('./controllers/HR');
 
+const DoctorRequests = require('./controllers/DoctorRequests');
+
+const DoctorVerification = require('./controllers/DoctorVerification');
+
 const { poolPromise } = require('./db');
 const { authenticate } = require('./utils/auth');
 
@@ -122,6 +126,8 @@ app.use('/app', Reports)
 app.use('/app', Insights)
 app.use('/app', Approvals)
 app.use('/app', HR)
+app.use('/app', DoctorRequests)
+app.use('/app', DoctorVerification)
 
 
 
