@@ -70,6 +70,12 @@ const Expenses = require('./controllers/Expenses');
 
 const Reports = require('./controllers/Reports');
 
+const Insights = require('./controllers/Insights');
+
+const Approvals = require('./controllers/Approvals');
+
+const HR = require('./controllers/HR');
+
 const { poolPromise } = require('./db');
 const { authenticate } = require('./utils/auth');
 
@@ -113,6 +119,9 @@ app.use('/app', SalesPlan)
 app.use('/app', DoctorPlan)
 app.use('/app', Expenses)
 app.use('/app', Reports)
+app.use('/app', Insights)
+app.use('/app', Approvals)
+app.use('/app', HR)
 
 
 

@@ -658,3 +658,9 @@ exports.getGraphReport = async (actingUserId, query) => {
         topEmployees: [...mis.scorecard].sort((a, b) => b.calls - a.calls).slice(0, 10).map((row) => ({ Name: row.Name, calls: row.calls, pobValue: row.pobValue, secondaryValue: row.secondaryValue })),
     };
 };
+
+// KPI report score for one employee over a period (used by appraisals).
+exports.kpiScoreFor = async (userId, from, to) => {
+    const rows = await buildScorecard(userId, { ActingUserId: userId, ViewAll: 0, FromDate: from, ToDate: to, UserId: userId, TerritoryId: null });
+    return rows.find((row) => String(row.UserId).toLowerCase() === String(userId).toLowerCase()) || null;
+};

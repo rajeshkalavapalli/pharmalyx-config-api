@@ -162,3 +162,15 @@
 # V 1.0.40
 
 - Added MIS, Coverage, KPI, Missed Visits, POB, Sales and Graphical report apis with hierarchy scope and permissions
+
+# V 1.0.41
+
+- Added Insights apis (rule based alerts for doctors, reps and stock with admin editable thresholds and acknowledge / resolve, performance trends, field intelligence, doctor segmentation, pareto and month end forecast) with permissions
+
+# V 1.0.42
+
+- Added approvals inbox api (all pending approvals for the signed in user, approve / return tour plans, deviations and DCRs using the existing rules)
+
+# V 1.0.43
+
+- Added HR apis (attendance check in / out and month status, leave types / balances / apply / approve / cancel, activity timeline, appraisal cycles with self and manager review and KPI based final score), leave in the approvals inbox, with permissions

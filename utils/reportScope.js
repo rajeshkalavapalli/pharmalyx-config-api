@@ -119,4 +119,24 @@ const resolveFilters = async (actingUserId, query, { product = false } = {}) => 
     };
 };
 
-module.exports = { SCOPE_CTE, displayName, getScopeUsers, getFilterOptions, resolveFilters, MAX_RANGE_DAYS };
+// Scope inputs without a date range (insights): optional employee, checked against the hierarchy.
+const resolveScope = async (actingUserId, userId) => {
+    requireActingUser(actingUserId);
+
+    const ViewAll = await viewAllFor(actingUserId);
+
+    if (userId) {
+        if (!isGuid(userId)) throw fail(400, 'Employee is invalid.');
+
+        if (!ViewAll && !sameId(userId, actingUserId)) {
+            const { users } = await getScopeUsers(actingUserId);
+            if (!users.some((user) => sameId(user.UserId, userId))) {
+                throw fail(403, 'You can only see insights for yourself and the people under you.');
+            }
+        }
+    }
+
+    return { ActingUserId: actingUserId, ViewAll, UserId: userId || null };
+};
+
+module.exports = { SCOPE_CTE, displayName, getScopeUsers, getFilterOptions, resolveFilters, resolveScope, MAX_RANGE_DAYS };
