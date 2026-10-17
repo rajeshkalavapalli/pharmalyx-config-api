@@ -1,4 +1,12 @@
+const { getPermissions } = require('../../utils/permissions');
 const DoctorDA = require('./DoctorDA')
+const { writeAudit } = require('../../utils/audit');
+const { customQuery } = require('../../utils/dbFunctions');
+const { normalizeName } = require('../../utils/doctorMatching');
+
+// Keeps the duplicate-search key in step with the name (column added by the verification schema).
+const syncNormalizedName = (DoctorId, DoctorName) =>
+    customQuery('UPDATE dbo.Doctor SET NormalizedName = @NormalizedName WHERE DoctorId = @DoctorId', { DoctorId, NormalizedName: normalizeName(DoctorName) }).catch(() => null);
 
 const { generateUUID } = require('../../utils/commonUtils');
 
@@ -62,7 +70,7 @@ const engagementFields = (data) => ({
     AnniversaryDate: toDate(data.AnniversaryDate ?? data.anniversaryDate, 'Anniversary'),
 });
 
-exports.createDoctor = async (reqData) => {
+exports.createDoctor = async (reqData, actingUserId) => {
     try {
         const doctorId = generateUUID();
         const now = new Date();
@@ -86,6 +94,8 @@ exports.createDoctor = async (reqData) => {
         };
 
         await DoctorDA.createDoctor(newDoctor);
+        await syncNormalizedName(doctorId, newDoctor.DoctorName);
+        await writeAudit({ entityType: 'DOCTOR', entityId: doctorId, action: 'CREATE', actorId: actingUserId, after: newDoctor });
 
         return {
             success: true,
@@ -98,9 +108,12 @@ exports.createDoctor = async (reqData) => {
     }
 }
 
-exports.getDoctors = async () => {
+const seesAllDoctors = async (actingUserId) => (await getPermissions(actingUserId)).has('masters.view');
+
+exports.getDoctors = async (actingUserId) => {
     try {
-        return await DoctorDA.getDoctors();
+        if (await seesAllDoctors(actingUserId)) return await DoctorDA.getDoctors();
+        return await DoctorDA.getDoctors({ ActingUserId: actingUserId, ViewAll: 0 });
     } catch (err) {
         console.log("error getting doctors", err)
         throw err;
@@ -108,8 +121,13 @@ exports.getDoctors = async () => {
 }
 
 
-exports.getDoctorById = async (doctorId) => {
+exports.getDoctorById = async (doctorId, actingUserId) => {
     try {
+        if (!(await seesAllDoctors(actingUserId)) && !(await DoctorDA.isDoctorInScope(doctorId, actingUserId))) {
+            const error = new Error('Doctor not found.');
+            error.status = 404;
+            throw error;
+        }
         return await DoctorDA.getDoctorById(doctorId);
     } catch (err) {
         console.log("error getting doctor by ID", err)
@@ -117,7 +135,7 @@ exports.getDoctorById = async (doctorId) => {
     }
 }
 
-exports.updateDoctor = async (doctorId, updatedDoctor) => {
+exports.updateDoctor = async (doctorId, updatedDoctor, actingUserId) => {
     try {
         // Only known columns reach the UPDATE statement.
         const DoctorUpdate = {
@@ -135,16 +153,23 @@ exports.updateDoctor = async (doctorId, updatedDoctor) => {
             IsActive: updatedDoctor.IsActive === 'No' ? 'No' : 'Yes',
             ModifiedOn: new Date()
         }
-        return await DoctorDA.updateDoctor(doctorId, DoctorUpdate);
+        const before = (await DoctorDA.getDoctorById(doctorId))[0] || null;
+        const result = await DoctorDA.updateDoctor(doctorId, DoctorUpdate);
+        if (DoctorUpdate.DoctorName) await syncNormalizedName(doctorId, DoctorUpdate.DoctorName);
+        await writeAudit({ entityType: 'DOCTOR', entityId: doctorId, action: 'UPDATE', actorId: actingUserId, before, after: DoctorUpdate });
+        return result;
     } catch (err) {
         console.log("error updating doctor", err)
         throw err;
     }
 }
 
-exports.deleteDoctor = async (doctorId) => {
+exports.deleteDoctor = async (doctorId, actingUserId) => {
     try {
-        return await DoctorDA.deactivateDoctor(doctorId);
+        const before = (await DoctorDA.getDoctorById(doctorId))[0] || null;
+        const result = await DoctorDA.deactivateDoctor(doctorId);
+        await writeAudit({ entityType: 'DOCTOR', entityId: doctorId, action: 'DEACTIVATE', actorId: actingUserId, before });
+        return result;
     } catch (err) {
         console.log("error deleting doctor", err)
         throw err;

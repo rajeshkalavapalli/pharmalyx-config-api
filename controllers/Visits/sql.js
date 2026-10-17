@@ -34,7 +34,11 @@ const VISIT_SELECT = `
         dv.Status AS DeviationStatus,
         v.RecordedOffline,
         v.RecordedAt,
-        v.CreatedOn
+        v.CreatedOn,
+        v.DistanceFromClinicM,
+        v.GeofenceStatus,
+        v.GeofenceReason,
+        v.IsMockLocation
     FROM dbo.Visits v
     INNER JOIN Users u ON u.UserId = v.UserId
     INNER JOIN dbo.Doctor doc ON doc.DoctorId = v.DoctorId
@@ -128,7 +132,9 @@ module.exports = {
                 doc.DoctorId,
                 doc.DoctorName,
                 TRY_CONVERT(UNIQUEIDENTIFIER, doc.TerritoryId) AS TerritoryId,
-                TRY_CONVERT(UNIQUEIDENTIFIER, doc.AreaId) AS AreaId
+                TRY_CONVERT(UNIQUEIDENTIFIER, doc.AreaId) AS AreaId,
+                doc.ClinicLatitude,
+                doc.ClinicLongitude
             FROM dbo.UserDoctorMapping m
             INNER JOIN dbo.Doctor doc ON doc.DoctorId = m.DoctorId
             WHERE m.UserId = @UserId
@@ -190,7 +196,11 @@ module.exports = {
                 RecordedOffline,
                 RecordedAt,
                 CreatedOn,
-                ModifiedOn
+                ModifiedOn,
+                DistanceFromClinicM,
+                GeofenceStatus,
+                GeofenceReason,
+                IsMockLocation
             )
             VALUES (
                 @VisitId,
@@ -215,7 +225,11 @@ module.exports = {
                 @RecordedOffline,
                 @RecordedAt,
                 @CreatedOn,
-                NULL
+                NULL,
+                @DistanceFromClinicM,
+                @GeofenceStatus,
+                @GeofenceReason,
+                @IsMockLocation
             )
         `;
     },

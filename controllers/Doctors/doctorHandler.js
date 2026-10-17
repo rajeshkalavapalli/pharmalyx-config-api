@@ -1,17 +1,16 @@
 const doctorService = require('./doctorService')
+const { actingUser } = require('../../utils/http')
 
 exports.createDoctor = async (req, res) => {
     try {
         const reqData = req.body;
-        console.log("doctor data from frontend", reqData)
-
         if (!reqData.doctorName || !reqData.qualification || !reqData.speciality || !reqData.hospitalName) {
             return res.status(400).json({
                 message: "Doctor name, qualification, speciality and hospital name are required"
             });
         }
 
-        const result = await doctorService.createDoctor(reqData)
+        const result = await doctorService.createDoctor(reqData, actingUser(req))
 
         res.status(201).json(result)
     } catch (err) {
@@ -24,7 +23,7 @@ exports.createDoctor = async (req, res) => {
 
 exports.getDoctors = async (req, res) => {
     try {
-        const result = await doctorService.getDoctors()
+        const result = await doctorService.getDoctors(req.user?.userId)
         res.status(200).json({
             doctors: result
         })
@@ -39,9 +38,10 @@ exports.getDoctors = async (req, res) => {
 exports.getDoctorById = async (req, res) => {
     try {
         const doctorId = req.params.doctorId;
-        const result = await doctorService.getDoctorById(doctorId);
+        const result = await doctorService.getDoctorById(doctorId, req.user?.userId);
         res.status(200).json(result);
     } catch (err) {
+        if (err.status) return res.status(err.status).json({ message: err.message });
         console.log("error getting doctor by ID", err);
         res.status(500).json({
             message: "Failed to get doctor by ID"
@@ -53,7 +53,7 @@ exports.updateDoctor = async (req, res) => {
     try {
         const doctorId = req.params.doctorId;
         const updatedDoctor = req.body;
-        const result = await doctorService.updateDoctor(doctorId, updatedDoctor);
+        const result = await doctorService.updateDoctor(doctorId, updatedDoctor, actingUser(req));
         res.status(200).json(result);
     } catch (err) {
         console.log("error updating doctor", err);
@@ -66,7 +66,7 @@ exports.updateDoctor = async (req, res) => {
 exports.deleteDoctor = async (req, res) => {
     try {
         const doctorId = req.params.doctorId;
-        const result = await doctorService.deleteDoctor(doctorId);
+        const result = await doctorService.deleteDoctor(doctorId, actingUser(req));
         res.status(200).json(result);
     } catch (err) {
         console.log("error deleting doctor", err);

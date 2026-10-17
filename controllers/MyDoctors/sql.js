@@ -44,7 +44,12 @@ module.exports = {
                 d.VisitsPerMonth,
                 CONVERT(VARCHAR(10), d.DateOfBirth, 23) AS DateOfBirth,
                 CONVERT(VARCHAR(10), d.AnniversaryDate, 23) AS AnniversaryDate,
-                m.CreatedOn AS AssignedOn
+                m.CreatedOn AS AssignedOn,
+                d.VerificationStatus,
+                CONVERT(VARCHAR(10), d.VerificationDueOn, 23) AS VerificationDueOn,
+                d.ClinicLatitude,
+                d.ClinicLongitude,
+                (SELECT TOP 1 SettingValue FROM dbo.AntiFraudSettings WHERE SettingKey = 'GEOFENCE_METERS') AS GeofenceMeters
             FROM dbo.UserDoctorMapping m
             INNER JOIN dbo.Doctor d ON d.DoctorId = m.DoctorId
             LEFT JOIN Territory t ON t.TerritoryId = TRY_CONVERT(UNIQUEIDENTIFIER, d.TerritoryId)

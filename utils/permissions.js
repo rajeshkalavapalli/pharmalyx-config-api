@@ -30,4 +30,20 @@ const requirePermission = (code) => async (req, res, next) => {
     }
 };
 
-module.exports = { getPermissions, requirePermission };
+// Route guard: passes when the role has at least one of the codes.
+const requireAnyPermission = (...codes) => async (req, res, next) => {
+    try {
+        const permissions = await getPermissions(req.user?.userId);
+
+        if (!codes.some((code) => permissions.has(code))) {
+            return res.status(403).json({ message: "You don't have permission to do this." });
+        }
+
+        return next();
+    } catch (error) {
+        console.error('Error checking permission:', error);
+        return res.status(500).json({ message: 'Failed to check permissions.', error: error.message });
+    }
+};
+
+module.exports = { getPermissions, requirePermission, requireAnyPermission };

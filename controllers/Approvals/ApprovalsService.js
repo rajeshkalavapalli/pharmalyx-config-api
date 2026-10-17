@@ -4,6 +4,8 @@ const DeviationService = require('../DeviationTourPlan/DeviationService');
 const DcrService = require('../Dcr/DcrService');
 const LeaveService = require('../HR/LeaveService');
 const HRDA = require('../HR/HRDA');
+const DoctorRequestsDA = require('../DoctorRequests/DoctorRequestsDA');
+const DoctorVerificationDA = require('../DoctorVerification/DoctorVerificationDA');
 
 const { getPermissions } = require('../../utils/permissions');
 const { fail, isGuid, optionalText, requireActingUser, todayKey } = require('../../utils/access');
@@ -71,6 +73,39 @@ const TYPES = {
         }),
         decide: (actingUserId, id, approve, remarks) => LeaveService.review(actingUserId, id, approve, remarks),
     },
+    DOCTOR_REQUEST: {
+        label: 'Doctor request',
+        // Requests without a manager go to admins; `isAdmin` is resolved in getInbox.
+        load: (UserId, isAdmin) => DoctorRequestsDA.pendingForApprover({ UserId, IsAdmin: isAdmin ? 1 : 0 }).catch(() => []),
+        permission: 'doctorrequests.approve',
+        link: '/field-operation/doctor-requests',
+        describe: (row) => {
+            let duplicates = 0;
+            let resubmit = false;
+            try {
+                const snapshot = JSON.parse(row.FlagsSnapshot || '{}');
+                duplicates = (snapshot.duplicates || []).length;
+                resubmit = Boolean(snapshot.resubmitOf);
+            } catch {
+                duplicates = 0;
+            }
+            const action = { CREATE: 'New doctor', EDIT: 'Edit', DELETE: 'Delete' }[row.RequestType];
+            return {
+                period: `${action}: Dr. ${row.DoctorName}`,
+                summary: [resubmit ? 'Sent again after rejection' : null, row.Speciality, row.AreaName, duplicates ? `${duplicates} possible duplicate(s)` : null, row.Comment].filter(Boolean).join(' · '),
+            };
+        },
+    },
+    DOCTOR_VERIFICATION: {
+        label: 'Doctor verification',
+        load: (UserId, isAdmin) => DoctorVerificationDA.pendingForApprover({ UserId, IsAdmin: isAdmin ? 1 : 0 }).catch(() => []),
+        permission: 'doctorrequests.approve',
+        link: '/field-operation/doctor-requests',
+        describe: (row) => ({
+            period: `Verify Dr. ${row.DoctorName}`,
+            summary: [{ REGISTRATION_NO: 'Registration no.', PHONE: 'Phone', DOCUMENT: 'Photo' }[row.Method], row.Value, row.Speciality, row.AreaName].filter(Boolean).join(' · '),
+        }),
+    },
     STATEMENT: {
         label: 'Secondary sales statement',
         load: ApprovalsDA.getStatements,
@@ -113,7 +148,8 @@ exports.getInbox = async (actingUserId) => {
     const permissions = await getPermissions(actingUserId);
     const visible = Object.entries(TYPES).filter(([, type]) => !type.permission || permissions.has(type.permission));
 
-    const loaded = await Promise.all(visible.map(([, type]) => type.load(actingUserId)));
+    const admin = permissions.has('masters.edit');
+    const loaded = await Promise.all(visible.map(([, type]) => type.load(actingUserId, admin)));
 
     const items = visible
         .flatMap(([code, type], index) =>

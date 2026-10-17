@@ -1,3 +1,12 @@
+const { SCOPE_CTE } = require('../../utils/reportScope');
+
+// Doctor assigned to (or added by) someone in Scope(UserId).
+const IN_TEAM = `(
+    EXISTS (SELECT 1 FROM dbo.UserDoctorMapping m INNER JOIN Scope s ON s.UserId = m.UserId
+            WHERE m.DoctorId = d.DoctorId AND ISNULL(m.IsActive, 'Yes') <> 'No')
+    OR EXISTS (SELECT 1 FROM Scope s WHERE s.UserId = d.CreatedBy)
+)`;
+
 module.exports = {
     CREATE_DOCTOR: () => {
         return `
@@ -43,8 +52,10 @@ module.exports = {
         `;
     },
 
-    GET_DOCTORS: () => {
+    // scoped: only doctors assigned to, or added by, the acting user or their team (needs @ActingUserId, @ViewAll).
+    GET_DOCTORS: (scoped = false) => {
         return `
+            ${scoped ? SCOPE_CTE : ''}
             SELECT
                 d.DoctorId,
                 d.DoctorName,
@@ -65,13 +76,27 @@ module.exports = {
                 d.CreatedOn,
                 d.ModifiedOn,
                 a.AreaName,
-                t.TerritoryName
+                t.TerritoryName,
+                d.ApprovalStatus,
+                ${scoped
+                    ? `CASE WHEN EXISTS (SELECT 1 FROM dbo.UserDoctorMapping me
+                                         WHERE me.DoctorId = d.DoctorId AND me.UserId = @ActingUserId AND ISNULL(me.IsActive, 'Yes') <> 'No')
+                            THEN 1 ELSE 0 END`
+                    : '1'} AS IsMine
             FROM dbo.Doctor d
             LEFT JOIN Areas a ON a.AreaId = d.AreaId
             LEFT JOIN Territory t ON t.TerritoryId = d.TerritoryId
+            ${scoped ? `WHERE ${IN_TEAM}` : ''}
             ORDER BY d.CreatedOn DESC
         `;
     },
+    DOCTOR_IN_SCOPE: () => {
+        return `
+            ${SCOPE_CTE}
+            SELECT TOP 1 1 AS Found FROM dbo.Doctor d WHERE d.DoctorId = @DoctorId AND ${IN_TEAM}
+        `;
+    },
+
     GET_DOCTOR_BY_ID: () => {
         return `
             SELECT
