@@ -1,7 +1,9 @@
 module.exports = {
     // Sign-in lookup by username or email (case-insensitive by collation).
+    // Sign-in lookup by username or email. Deactivated users cannot sign in
+    // (the check runs only once the Users.IsActive column exists).
     GET_LOGIN_USER: () => {
-        return `
+        const select = `
             SELECT TOP (1)
                 u.UserId,
                 u.UserName,
@@ -10,7 +12,13 @@ module.exports = {
                 sld.SystemLovDetailName AS DesignationName
             FROM Users u
             LEFT JOIN SystemLovDetails sld ON sld.SystemLovDetailId = u.DesignationId
-            WHERE u.UserName = @Login OR u.EmailId = @Login
+            WHERE (u.UserName = @Login OR u.EmailId = @Login)`;
+
+        return `
+            IF COL_LENGTH('dbo.Users', 'IsActive') IS NULL
+                ${select};
+            ELSE
+                EXEC sp_executesql N'${select.replace(/'/g, "''")} AND u.IsActive = 1', N'@Login NVARCHAR(200)', @Login = @Login;
         `;
     },
 

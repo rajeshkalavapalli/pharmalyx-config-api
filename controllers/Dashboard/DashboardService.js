@@ -63,6 +63,9 @@ exports.getDashboard = async (actingUserId) => {
         team,
         recent,
         followUps,
+        schedule,
+        plannedDays,
+        territories,
     ] = await Promise.all([
         DashboardDA.getKpis({
             UserId: actingUserId,
@@ -82,6 +85,9 @@ exports.getDashboard = async (actingUserId) => {
         DashboardDA.getTeam(actingUserId, monthStart, monthEnd),
         DashboardDA.getRecentVisits(actingUserId, addDays(today, -30), today),
         DashboardDA.getOpenFollowUps(actingUserId),
+        DashboardDA.getTodaySchedule(actingUserId, today),
+        DashboardDA.getPlannedDays(actingUserId, trendFrom, today),
+        DashboardDA.getTerritoryCoverage(actingUserId, monthStart, monthEnd, today),
     ]);
 
     // 14-day visit trend, zero-filled.
@@ -90,6 +96,14 @@ exports.getDashboard = async (actingUserId) => {
         const date = addDays(trendFrom, index);
         return { date, visits: byDay.get(date) || 0 };
     });
+
+    // Planned calls (pre-call) per day, next to completed visits.
+    const plannedByDay = new Map(plannedDays.map((row) => [row.PlanDate, number(row.Planned)]));
+    trend.forEach((day) => {
+        day.planned = plannedByDay.get(day.date) || 0;
+    });
+
+    const territoryCoverage = summariseTerritories(territories);
 
     // Field days whose DCR deadline passed without one.
     const sentDates = new Set(dcrDates.map((row) => row.ReportDate));
@@ -119,6 +133,10 @@ exports.getDashboard = async (actingUserId) => {
             visits: k.VisitsToday,
             plan: todayPlan,
             dcrStatus: todayDcr,
+            // Planned calls first (in call order), then unplanned visits by time.
+            schedule: schedule
+                .sort((a, b) => (a.Source === b.Source ? (a.CallOrder ?? 0) - (b.CallOrder ?? 0) || String(a.VisitTime).localeCompare(String(b.VisitTime)) : a.Source === 'PLAN' ? -1 : 1))
+                .map(({ Source, ...row }) => ({ ...row, planned: Source === 'PLAN' })),
         },
         month: {
             start: monthStart,
@@ -138,6 +156,7 @@ exports.getDashboard = async (actingUserId) => {
             planStatus,
         },
         trend,
+        territoryCoverage,
         followUps: {
             due: dueFollowUps.length,
             overdue: dueFollowUps.filter((item) => item.FollowUpDate < today).length,
@@ -161,6 +180,35 @@ exports.getDashboard = async (actingUserId) => {
             lastVisitDate: row.LastVisitDate ? keyOf(new Date(row.LastVisitDate)) : null,
         })),
     };
+};
+
+// Territory coverage: covered (a doctor visited), pending (still on the tour plan), not planned.
+const summariseTerritories = (territories) => {
+    const territoryRows = territories
+        .map((row) => {
+            const doctors = number(row.Doctors);
+            const visited = number(row.DoctorsVisited);
+
+            return {
+                TerritoryId: row.TerritoryId,
+                TerritoryName: row.TerritoryName,
+                doctors,
+                doctorsVisited: visited,
+                visits: number(row.Visits),
+                coverage: doctors ? Math.round((visited / doctors) * 100) : 0,
+                status: visited > 0 ? 'COVERED' : number(row.PlannedAhead) ? 'PENDING' : 'NOT_PLANNED',
+            };
+        })
+        .sort((x, y) => y.coverage - x.coverage || y.visits - x.visits || String(x.TerritoryName).localeCompare(String(y.TerritoryName)));
+
+    return {
+        total: territoryRows.length,
+        covered: territoryRows.filter((row) => row.status === 'COVERED').length,
+        pending: territoryRows.filter((row) => row.status === 'PENDING').length,
+        notPlanned: territoryRows.filter((row) => row.status === 'NOT_PLANNED').length,
+        top: territoryRows.slice(0, 5),
+    };
+
 };
 
 // Engagement, charts and the team view. Optional sections come back as null.
@@ -236,12 +284,19 @@ const buildInsights = async ({ userId, today, monthStart, monthEnd, isManager })
 
     if (isManager) {
         const trendFromDay = addDays(today, -(TREND_DAYS - 1));
-        const [teamDays, teamToday, teamBusiness, teamSamples] = await Promise.all([
+        const [teamDays, teamToday, teamBusiness, teamSamples, teamPlannedDays, membersToday, plannedToday, teamTerritories] = await Promise.all([
             DashboardDA.getTeamVisitDays(userId, trendFromDay, today),
             DashboardDA.getTeamToday(userId, today, monthStart, monthEnd),
             DashboardDA.getTeamBusiness(userId, monthStart),
             DashboardDA.getTeamSamples(userId, monthStart, monthEnd),
+            DashboardDA.getTeamPlannedDays(userId, trendFromDay, today),
+            DashboardDA.getTeamMembersToday(userId, today, monthStart),
+            DashboardDA.getTeamPlannedToday(userId, today),
+            DashboardDA.getTeamTerritoryCoverage(userId, monthStart, monthEnd, today),
         ]);
+
+        const teamPlannedByDay = new Map(teamPlannedDays.map((row) => [row.PlanDate, number(row.Planned)]));
+        const plannedByUser = new Map(plannedToday.map((row) => [String(row.UserId).toLowerCase(), number(row.Planned)]));
 
         const teamByDay = new Map(teamDays.map((row) => [row.VisitDate, number(row.VisitCount)]));
 
@@ -256,8 +311,26 @@ const buildInsights = async ({ userId, today, monthStart, monthEnd, isManager })
             samplesGiven: teamSamples ? number(teamSamples.Given) : null,
             trend: Array.from({ length: TREND_DAYS }, (_, index) => {
                 const date = addDays(trendFromDay, index);
-                return { date, visits: teamByDay.get(date) || 0 };
+                return { date, visits: teamByDay.get(date) || 0, planned: teamPlannedByDay.get(date) || 0 };
             }),
+            plannedToday: plannedToday.reduce((sum, row) => sum + number(row.Planned), 0),
+            // Field status per rep today: off day / no activity / in field / DCR sent.
+            membersToday: membersToday.map((row) => {
+                const visits = number(row.VisitsToday);
+                const status = row.DcrStatus ? 'DCR_SENT' : visits ? 'IN_FIELD' : row.DayType === 'non-working' ? 'OFF' : 'NOT_STARTED';
+
+                return {
+                    UserId: row.UserId,
+                    visits,
+                    planned: plannedByUser.get(String(row.UserId).toLowerCase()) || 0,
+                    firstVisit: row.FirstVisit,
+                    lastVisit: row.LastVisit,
+                    territory: row.TerritoryName,
+                    dcrStatus: row.DcrStatus,
+                    status,
+                };
+            }),
+            territoryCoverage: summariseTerritories(teamTerritories),
         };
     }
 

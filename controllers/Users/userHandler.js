@@ -1,4 +1,5 @@
 const userService = require('../Users/UserService');
+const { issueToken } = require('../../utils/auth');
 
 exports.getDesignation = async (req, res) => {
     try {
@@ -101,8 +102,10 @@ exports.login = async (req, res) => {
         }
 
         const user = await userService.login(login, password);
+        const session = issueToken(user.UserId);
 
-        return res.status(200).json({ user });
+        // `user` is unchanged for existing callers; the token is new.
+        return res.status(200).json({ user, ...session });
     } catch (err) {
         if (err.status) {
             return res.status(err.status).json({ message: err.message });
