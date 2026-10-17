@@ -98,3 +98,67 @@
 # V 1.0.24
 
 - Added role based tour plan apis (team plans and plan history)
+
+# V 1.0.25
+
+- Added secure login token, every api now requires sign in and user identity can no longer be changed from the browser
+
+# V 1.0.26
+
+- Added roles and permissions apis with on / off permission per role, user role assignment and deactivated users cannot sign in
+
+# V 1.0.27
+
+- Permissions changed to feature wise view, create, edit, delete and approve, with view required for other actions
+
+# V 1.0.28
+
+- Added pre-call planning api (doctors to meet as per tour plan with priority and doctor briefing)
+
+# V 1.0.29
+
+- Added pre-call plan apis (plan call objective, key messages, products, call order) and planned call marked visited when visit is logged
+
+# V 1.0.30
+
+- Added POB / Orders apis (book order with catalogue prices, free qty and discount, order status confirm / supplied / cancel, team orders) with orders permissions
+
+# V 1.0.31
+
+- Added Retailers and Stockists apis (assigned chemists / stockists with order business, pending supply, last RCPA and recent orders) with view permissions
+
+# V 1.0.32
+
+- Added Secondary Sales apis (monthly stockist statement, opening carried from last month closing, submit, manager approve / return) and stockist stock api (latest closing stock with cover days) with permissions
+
+# V 1.0.33
+
+- Added sales business summary api (POB, secondary sales and stock with six month trend, top products, stockists and customers) with view permission
+
+# V 1.0.34
+
+- Added Sales Plan apis (monthly product targets set by manager, achievement on secondary and POB supplied, team summary) and Doctor Business Plan apis (doctor wise visits, Rx units per product and support, submit, manager approve / return, achievement from visits, RCPA and POB) with permissions
+
+# V 1.0.35
+
+- Added Expenses apis (DA / TA rate card per designation, monthly claim from approved DCRs, other expenses with monthly limit, manager approve / reduce / return, finance final approve and mark paid) with permissions
+
+# V 1.0.36
+
+- Added today schedule (pre-call plan and today visits) to the dashboard api
+
+# V 1.0.37
+
+- Added planned calls per day and territory coverage (covered / pending / not planned, top territories) to the dashboard api
+
+# V 1.0.38
+
+- Added team planned calls per day, team members today status and team territory coverage to the dashboard api
+
+# V 1.0.39
+
+- Added reports framework (hierarchy scope at every level, report filters) and DCR / Call report api with permissions
+
+# V 1.0.40
+
+- Added MIS, Coverage, KPI, Missed Visits, POB, Sales and Graphical report apis with hierarchy scope and permissions

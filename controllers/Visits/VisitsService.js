@@ -1,6 +1,18 @@
 const VisitsDA = require('./VisitsDA');
 const StockService = require('../Stock/StockService');
 
+// A planned call for this doctor and day becomes "visited". Missing table = no-op
+// (SQL Server defers name resolution for tables that don't exist yet).
+const markPreCallVisited = (inputs) => ({
+    sqlQuery: `
+        IF OBJECT_ID('dbo.PreCallPlans', 'U') IS NOT NULL
+            UPDATE dbo.PreCallPlans
+            SET Status = 'VISITED', VisitId = @VisitId, ModifiedOn = SYSDATETIME()
+            WHERE UserId = @UserId AND PlanDate = @VisitDate AND DoctorId = @DoctorId AND Status = 'PLANNED';
+    `,
+    inputs,
+});
+
 const { generateUUID } = require('../../utils/commonUtils');
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -375,7 +387,7 @@ exports.createVisit = async (actingUserId, payload) => {
                 CreatedOn: now,
             },
             deviation,
-            distribution
+            [...distribution, markPreCallVisited({ UserId: actingUserId, DoctorId: doctorId, VisitDate: visitDate, VisitId: visitId })]
         );
     } catch (error) {
         throw StockService.mapDbError(error);

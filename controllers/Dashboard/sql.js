@@ -277,4 +277,146 @@ module.exports = {
               AND s.EntryDate BETWEEN @MonthStart AND @MonthEnd
         `;
     },
+
+    // Today's calls: the pre-call plan in call order, plus visits made today that weren't planned.
+    GET_TODAY_SCHEDULE: () => {
+        return `
+            SELECT 'PLAN' AS Source, pc.CallOrder, d.DoctorName, d.HospitalName, d.Category, pc.Objective, pc.Status,
+                   (SELECT TOP 1 CONVERT(VARCHAR(5), v.StartTime, 108) FROM dbo.Visits v
+                    WHERE v.UserId = pc.UserId AND v.DoctorId = pc.DoctorId AND v.VisitDate = pc.PlanDate
+                    ORDER BY v.StartTime) AS VisitTime
+            FROM dbo.PreCallPlans pc
+            INNER JOIN dbo.Doctor d ON d.DoctorId = pc.DoctorId
+            WHERE pc.UserId = @UserId AND pc.PlanDate = @Today
+
+            UNION ALL
+
+            SELECT 'VISIT', NULL, d.DoctorName, d.HospitalName, d.Category, NULL, 'VISITED', CONVERT(VARCHAR(5), v.StartTime, 108)
+            FROM dbo.Visits v
+            INNER JOIN dbo.Doctor d ON d.DoctorId = v.DoctorId
+            WHERE v.UserId = @UserId AND v.VisitDate = @Today
+              AND NOT EXISTS (SELECT 1 FROM dbo.PreCallPlans pc
+                              WHERE pc.UserId = v.UserId AND pc.DoctorId = v.DoctorId AND pc.PlanDate = v.VisitDate)
+        `;
+    },
+
+    // Calls planned per day in pre-call planning (for planned vs completed).
+    GET_PLANNED_DAYS: () => {
+        return `
+            SELECT CONVERT(VARCHAR(10), PlanDate, 23) AS PlanDate, COUNT(*) AS Planned
+            FROM dbo.PreCallPlans
+            WHERE UserId = @UserId AND PlanDate BETWEEN @FromDate AND @ToDate
+            GROUP BY PlanDate
+        `;
+    },
+
+    // Territories of the user's doctors: doctors, doctors visited this month,
+    // visits this month, and whether the tour plan still has a working day there.
+    GET_TERRITORY_COVERAGE: () => {
+        return `
+            SELECT
+                t.TerritoryId,
+                t.TerritoryName,
+                COUNT(*) AS Doctors,
+                SUM(CASE WHEN vd.DoctorId IS NOT NULL THEN 1 ELSE 0 END) AS DoctorsVisited,
+                ISNULL(SUM(vd.Visits), 0) AS Visits,
+                MAX(CASE WHEN tpd.TerritoryId IS NOT NULL THEN 1 ELSE 0 END) AS PlannedAhead
+            FROM dbo.UserDoctorMapping m
+            INNER JOIN dbo.Doctor d ON d.DoctorId = m.DoctorId
+            INNER JOIN Territory t ON t.TerritoryId = TRY_CONVERT(UNIQUEIDENTIFIER, d.TerritoryId)
+            LEFT JOIN (
+                SELECT DoctorId, COUNT(*) AS Visits FROM dbo.Visits
+                WHERE UserId = @UserId AND VisitDate BETWEEN @MonthStart AND @MonthEnd
+                GROUP BY DoctorId
+            ) vd ON vd.DoctorId = m.DoctorId
+            LEFT JOIN (
+                SELECT DISTINCT dt.TerritoryId
+                FROM dbo.TourPlan tp
+                INNER JOIN dbo.TourPlanDetails dt ON dt.TourPlanId = tp.TourPlanId
+                WHERE tp.UserId = @UserId AND tp.PlanMonth = @MonthStart
+                  AND dt.DayType = 'working' AND dt.PlanDate >= @Today
+            ) tpd ON tpd.TerritoryId = t.TerritoryId
+            WHERE m.UserId = @UserId
+              AND ISNULL(m.IsActive, 'Yes') <> 'No'
+              AND ISNULL(d.IsActive, 'Yes') <> 'No'
+            GROUP BY t.TerritoryId, t.TerritoryName
+        `;
+    },
+
+    // ---------------------------------------------------------
+    // Team view extras
+    // ---------------------------------------------------------
+
+    GET_TEAM_PLANNED_DAYS: () => {
+        return `
+            SELECT CONVERT(VARCHAR(10), pc.PlanDate, 23) AS PlanDate, COUNT(*) AS Planned
+            FROM dbo.PreCallPlans pc
+            INNER JOIN Users u ON u.UserId = pc.UserId
+            WHERE u.ManagerId = @UserId AND pc.PlanDate BETWEEN @FromDate AND @ToDate
+            GROUP BY pc.PlanDate
+        `;
+    },
+
+    // Each direct report today: tour plan day, visits, first/last visit time, DCR status.
+    GET_TEAM_MEMBERS_TODAY: () => {
+        return `
+            SELECT
+                u.UserId,
+                (SELECT COUNT(*) FROM dbo.Visits v WHERE v.UserId = u.UserId AND v.VisitDate = @Today) AS VisitsToday,
+                (SELECT CONVERT(VARCHAR(5), MIN(v.StartTime), 108) FROM dbo.Visits v WHERE v.UserId = u.UserId AND v.VisitDate = @Today) AS FirstVisit,
+                (SELECT CONVERT(VARCHAR(5), MAX(v.StartTime), 108) FROM dbo.Visits v WHERE v.UserId = u.UserId AND v.VisitDate = @Today) AS LastVisit,
+                (SELECT TOP 1 r.Status FROM dbo.DailyCallReports r WHERE r.UserId = u.UserId AND r.ReportDate = @Today) AS DcrStatus,
+                (SELECT TOP 1 d.DayType FROM dbo.TourPlan tp
+                 INNER JOIN dbo.TourPlanDetails d ON d.TourPlanId = tp.TourPlanId
+                 WHERE tp.UserId = u.UserId AND tp.PlanMonth = @MonthStart AND d.PlanDate = @Today) AS DayType,
+                (SELECT TOP 1 t.TerritoryName FROM dbo.TourPlan tp
+                 INNER JOIN dbo.TourPlanDetails d ON d.TourPlanId = tp.TourPlanId
+                 LEFT JOIN Territory t ON t.TerritoryId = d.TerritoryId
+                 WHERE tp.UserId = u.UserId AND tp.PlanMonth = @MonthStart AND d.PlanDate = @Today) AS TerritoryName
+            FROM Users u
+            WHERE u.ManagerId = @UserId
+        `;
+    },
+
+    GET_TEAM_PLANNED_TODAY: () => {
+        return `
+            SELECT pc.UserId, COUNT(*) AS Planned
+            FROM dbo.PreCallPlans pc
+            INNER JOIN Users u ON u.UserId = pc.UserId
+            WHERE u.ManagerId = @UserId AND pc.PlanDate = @Today
+            GROUP BY pc.UserId
+        `;
+    },
+
+    // Territories across the team's doctor assignments (same rules as the personal view).
+    GET_TEAM_TERRITORY_COVERAGE: () => {
+        return `
+            SELECT
+                t.TerritoryId,
+                t.TerritoryName,
+                COUNT(*) AS Doctors,
+                SUM(CASE WHEN vd.DoctorId IS NOT NULL THEN 1 ELSE 0 END) AS DoctorsVisited,
+                ISNULL(SUM(vd.Visits), 0) AS Visits,
+                MAX(CASE WHEN tpd.TerritoryId IS NOT NULL THEN 1 ELSE 0 END) AS PlannedAhead
+            FROM dbo.UserDoctorMapping m
+            INNER JOIN Users u ON u.UserId = m.UserId AND u.ManagerId = @UserId
+            INNER JOIN dbo.Doctor d ON d.DoctorId = m.DoctorId
+            INNER JOIN Territory t ON t.TerritoryId = TRY_CONVERT(UNIQUEIDENTIFIER, d.TerritoryId)
+            LEFT JOIN (
+                SELECT UserId, DoctorId, COUNT(*) AS Visits FROM dbo.Visits
+                WHERE VisitDate BETWEEN @MonthStart AND @MonthEnd
+                GROUP BY UserId, DoctorId
+            ) vd ON vd.UserId = m.UserId AND vd.DoctorId = m.DoctorId
+            LEFT JOIN (
+                SELECT DISTINCT dt.TerritoryId
+                FROM dbo.TourPlan tp
+                INNER JOIN Users tu ON tu.UserId = tp.UserId AND tu.ManagerId = @UserId
+                INNER JOIN dbo.TourPlanDetails dt ON dt.TourPlanId = tp.TourPlanId
+                WHERE tp.PlanMonth = @MonthStart AND dt.DayType = 'working' AND dt.PlanDate >= @Today
+            ) tpd ON tpd.TerritoryId = t.TerritoryId
+            WHERE ISNULL(m.IsActive, 'Yes') <> 'No'
+              AND ISNULL(d.IsActive, 'Yes') <> 'No'
+            GROUP BY t.TerritoryId, t.TerritoryName
+        `;
+    },
 };

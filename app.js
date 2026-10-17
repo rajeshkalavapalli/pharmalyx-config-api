@@ -50,10 +50,34 @@ const DoctorBusiness = require('./controllers/DoctorBusiness');
 
 const Feedback = require('./controllers/Feedback');
 
+const Roles = require('./controllers/Roles');
+
+const PreCall = require('./controllers/PreCall');
+
+const Orders = require('./controllers/Orders');
+
+const SalesAccounts = require('./controllers/SalesAccounts');
+
+const SecondarySales = require('./controllers/SecondarySales');
+
+const SalesBusiness = require('./controllers/SalesBusiness');
+
+const SalesPlan = require('./controllers/SalesPlan');
+
+const DoctorPlan = require('./controllers/DoctorPlan');
+
+const Expenses = require('./controllers/Expenses');
+
+const Reports = require('./controllers/Reports');
+
 const { poolPromise } = require('./db');
+const { authenticate } = require('./utils/auth');
 
 app.use(express.json());
 app.use(cors());
+
+// Every /app route requires a verified session except POST /app/login.
+app.use('/app', authenticate);
 
 app.use('/app', userRoutes)
 app.use('/app',divisionRoutes)
@@ -79,6 +103,16 @@ app.use('/app', Stock)
 app.use('/app', Rcpa)
 app.use('/app', DoctorBusiness)
 app.use('/app', Feedback)
+app.use('/app', Roles)
+app.use('/app', PreCall)
+app.use('/app', Orders)
+app.use('/app', SalesAccounts)
+app.use('/app', SecondarySales)
+app.use('/app', SalesBusiness)
+app.use('/app', SalesPlan)
+app.use('/app', DoctorPlan)
+app.use('/app', Expenses)
+app.use('/app', Reports)
 
 
 
