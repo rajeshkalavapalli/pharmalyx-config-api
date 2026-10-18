@@ -17,3 +17,8 @@ exports.removeEntry = (inputs) => runInTransaction([{ sqlQuery: sql.REMOVE_ENTRY
 
 // Query objects for callers that write stock inside their own transaction (Visits).
 exports.removeEntryQuery = (inputs) => ({ sqlQuery: sql.REMOVE_ENTRY(), inputs });
+exports.giveEntryQuery = (inputs) => ({ sqlQuery: sql.GIVE_ENTRY(), inputs });
+exports.getReconciliation = (UserId) => customQuery(sql.RECONCILIATION(), { UserId });
+exports.getItemBalance = async (inputs) => Number((await customQuery(sql.ITEM_BALANCE(), inputs))[0]?.Balance || 0);
+exports.insertCounts = (rows, audit) => runInTransaction([...rows.map((inputs) => ({ sqlQuery: sql.INSERT_COUNT(), inputs })), audit]);
+exports.getCountHistory = (UserId) => customQuery(sql.COUNT_HISTORY(), { UserId });

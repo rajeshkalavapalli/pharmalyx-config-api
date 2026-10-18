@@ -2,6 +2,9 @@
 const TourPlanDA = require('./TourPlanDA');
 
 const { generateUUID } = require('../../utils/commonUtils');
+const VerifiedWorkDA = require('../VerifiedWork/VerifiedWorkDA');
+
+const AUTO_APPROVED = 'Inside the territory: saved without manager approval.';
 
 const DAY_TYPES = ['working', 'non-working'];
 
@@ -57,6 +60,33 @@ const getStatuses = async () => {
     }
 
     return statuses;
+};
+
+exports.getStatuses = getStatuses;
+
+// Every planned field day must be in the MR's own territory. Work elsewhere needs head office:
+// special duty (any area that day) or leave cover (the covered colleague's areas).
+const assertInsideTerritory = async (userId, details) => {
+    const own = await VerifiedWorkDA.myAreas(userId);
+    if (!own.length) return; // territory not set up yet: nothing to check against
+
+    const ownIds = new Set(own.map((area) => String(area.AreaId).toLowerCase()));
+    const outside = details.filter((detail) => detail.DayType === 'working' && detail.AreaId && !ownIds.has(String(detail.AreaId).toLowerCase()));
+
+    for (const detail of outside) {
+        const exceptions = await VerifiedWorkDA.activeExceptions(userId, detail.PlanDate);
+        if (exceptions.some((e) => e.ExceptionType === 'SPECIAL_DUTY')) continue;
+
+        const covers = exceptions.filter((e) => e.ExceptionType === 'COVER' && e.CoverUserId);
+        let covered = false;
+        for (const cover of covers) {
+            const areas = await VerifiedWorkDA.myAreas(cover.CoverUserId);
+            if (areas.some((area) => String(area.AreaId).toLowerCase() === String(detail.AreaId).toLowerCase())) covered = true;
+        }
+        if (!covered) {
+            throw fail(400, `${detail.PlanDate} is outside your territory. Work outside the territory needs special duty or leave cover from head office.`);
+        }
+    }
 };
 
 const statusKey = (statuses, statusId) =>
@@ -224,7 +254,7 @@ exports.getTourPlan = async (actingUserId, userId, planMonth) => {
             ReviewedByName: plan.ReviewedByName || null,
             ReviewRemarks: plan.ReviewRemarks,
             details,
-            canEdit: isOwner && (status === 'DRAFT' || status === 'REJECTED'),
+            canEdit: isOwner,
             canApprove: isManager && !isOwner && status === 'SUBMITTED',
         },
         owner,
@@ -316,6 +346,8 @@ exports.getPlanHistory = async (actingUserId, userId) => {
     };
 };
 
+// Saving inside the territory approves the plan straight away: the MR may plan, swap days and
+// visit any doctor of their territory without manager approval. Drafts can still be kept.
 exports.saveTourPlan = async (actingUserId, tourPlanPayload) => {
     requireActingUser(actingUserId);
 
@@ -326,60 +358,49 @@ exports.saveTourPlan = async (actingUserId, tourPlanPayload) => {
     const submit = tourPlanPayload.Submit === true;
     const monthStart = toMonthStart(tourPlanPayload.PlanMonth);
     const details = await normalizeDetails(monthStart, tourPlanPayload.details, submit);
+    await assertInsideTerritory(actingUserId, details);
+
     const statuses = await getStatuses();
     const existing = await TourPlanDA.getTourPlanByUserMonth(actingUserId, monthStart);
-    const targetStatusId = submit ? statuses.SUBMITTED : statuses.DRAFT;
     const now = new Date();
 
     try {
         if (!existing) {
-            const user = await TourPlanDA.getUser(actingUserId);
-
-            if (!user) {
-                throw fail(404, 'User not found.');
-            }
-
-            if (submit && !user.ManagerId) {
-                throw fail(400, 'No reporting manager is assigned, so the plan cannot be submitted.');
-            }
-
             const TourPlanId = generateUUID();
 
             await TourPlanDA.createTourPlan({
                 TourPlanId,
                 UserId: actingUserId,
                 PlanMonth: monthStart,
-                StatusId: targetStatusId,
+                StatusId: submit ? statuses.APPROVED : statuses.DRAFT,
                 SubmittedOn: submit ? now : null,
                 CreatedOn: now,
                 ModifiedOn: null,
                 details,
             });
 
-            return { TourPlanId, Status: submit ? 'SUBMITTED' : 'DRAFT' };
+            return { TourPlanId, Status: submit ? 'APPROVED' : 'DRAFT', message: submit ? AUTO_APPROVED : 'Draft saved.' };
         }
 
         const current = statusKey(statuses, existing.StatusId);
 
-        if (current !== 'DRAFT' && current !== 'REJECTED') {
-            throw fail(409, 'Only draft or rejected plans can be edited.');
-        }
-
-        if (submit && !existing.ManagerId) {
-            throw fail(400, 'No reporting manager is assigned, so the plan cannot be submitted.');
+        // A plan already in use (approved, or waiting under the old approval flow) stays approved when changed.
+        if (submit || (current !== 'DRAFT' && current !== 'REJECTED')) {
+            await TourPlanDA.replaceOwnPlan({ TourPlanId: existing.TourPlanId, StatusId: statuses.APPROVED, Now: now, Remarks: AUTO_APPROVED, details });
+            return { TourPlanId: existing.TourPlanId, Status: 'APPROVED', message: AUTO_APPROVED };
         }
 
         await TourPlanDA.updateTourPlan({
             TourPlanId: existing.TourPlanId,
-            StatusId: targetStatusId,
+            StatusId: statuses.DRAFT,
             DraftStatusId: statuses.DRAFT,
             RejectedStatusId: statuses.REJECTED,
-            SubmittedOn: submit ? now : null,
+            SubmittedOn: null,
             ModifiedOn: now,
             details,
         });
 
-        return { TourPlanId: existing.TourPlanId, Status: submit ? 'SUBMITTED' : 'DRAFT' };
+        return { TourPlanId: existing.TourPlanId, Status: 'DRAFT', message: 'Draft saved.' };
     } catch (err) {
         throw mapDbError(err);
     }

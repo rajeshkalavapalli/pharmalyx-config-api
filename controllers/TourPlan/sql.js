@@ -117,7 +117,7 @@ module.exports = {
             SELECT
                 d.TourPlanId,
                 CONVERT(VARCHAR(10), d.PlanDate, 23) AS PlanDate,
-                d.DayType,
+                REPLACE(d.DayType, '_', '-') AS DayType,
                 d.TerritoryId,
                 t.TerritoryName,
                 d.AreaId,
@@ -182,6 +182,19 @@ module.exports = {
 
             IF @@ROWCOUNT = 0
                 THROW 50003, 'Tour plan is not in the expected status.', 1;
+        `;
+    },
+
+    // Owner saves a plan inside their territory: approved straight away (no manager approval).
+    APPROVE_OWN_PLAN: () => {
+        return `
+            UPDATE dbo.TourPlan
+            SET StatusId = @StatusId, ModifiedOn = @Now, SubmittedOn = ISNULL(SubmittedOn, @Now),
+                ReviewedBy = NULL, ReviewedOn = @Now, ReviewRemarks = @Remarks
+            WHERE TourPlanId = @TourPlanId;
+
+            IF @@ROWCOUNT = 0
+                THROW 50002, 'Tour plan not found.', 1;
         `;
     },
 

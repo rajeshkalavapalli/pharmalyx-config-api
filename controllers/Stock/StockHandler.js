@@ -12,3 +12,9 @@ exports.issueStock = handle('issue stock', (req) =>
 
 exports.returnStock = handle('return stock', (req) =>
     StockService.returnStock(actingUser(req), req.body || {}));
+
+exports.getReconciliation = handle('load the stock reconciliation', (req) =>
+    StockService.getReconciliation(actingUser(req), req.query));
+
+exports.recordCount = handle('save the stock count', (req) =>
+    StockService.recordCount(actingUser(req), req.body || {}), 201);

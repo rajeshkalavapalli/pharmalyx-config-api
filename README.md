@@ -221,3 +221,43 @@
 # V 1.0.53
 
 - Doctor edit requests can change active / inactive status (applied after manager approval); new doctor requests always start active
+
+
+# V 1.0.54
+
+- Added verified work: STP with head office approval and monthly plan generation, territory boundaries (auto around doctors or entered points) with head office exceptions (doctor, leave cover, special duty), automatic day start with head office flag when outside the territory, live check-in / check-out visit validity (minimum stay, clinic radius, vehicle movement, mock GPS, territory, overlap, leave) decided by the system with audited head office overrides, hospitals for multi-doctor locations, location consent and work-hour pings, TA from GPS distance and DA only with enough valid visits, tour plan changes inside the territory without manager approval, sample given-by stamping and physical stock counts, one doctor per MR on new mappings, and rule values editable per company (migration: controllers/VerifiedWork/schema.sql)
+
+
+# V 1.0.55
+
+- Standard tour plan returns the acting user's direct reports (whose plan they may prepare)
+
+
+# V 1.0.56
+
+- Standard tour plan can be taken back from head office (back to draft) by the MR or their manager while it is waiting, saved in the audit log
+
+
+# V 1.0.57
+
+- Added business tracking (migration: controllers/BusinessTracking/schema.sql): product batches, primary dispatch and returns per stockist territory with void instead of delete, net sales per territory per month (shared territories split), POB slip photo + GPS within the chemist radius + follow-up / verify workflow with audit, automatic order checks (inflated quantity, large first order, no reorder, month-end spike, reused slip photo) as head office flags, near-expiry alerts, ramp-up milestones, cost vs business, incentive slabs with 3-month holdback and return deductions, monthly review, POB follow-up in the approvals inbox
+
+
+# V 1.0.58
+
+- Fixed days off in tour plans never saving (the database accepts non_working, the app sent non-working): saved as non_working and read back as non-working everywhere; fixed the business tracking migration failing on the slip photo index (index now created after the column exists)
+
+
+# V 1.0.59
+
+- Added dashboard module data (/dashboard/modules/:section): headline numbers and bar chart series per module for my work or my team (hierarchy; head office sees all), read-only
+
+
+# V 1.0.60
+
+- Dashboard module data for reports and analytics: call average and coverage by month, missed doctors by class, top representatives, DCRs submitted, POB orders
+
+
+# V 1.0.61
+
+- Dashboard modules: each chart now carries a chart type (line, donut, rank, bar) and each headline number a 6-month sparkline and % change vs last month

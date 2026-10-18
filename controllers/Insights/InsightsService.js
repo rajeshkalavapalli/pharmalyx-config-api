@@ -99,7 +99,7 @@ const buildAlerts = async (inputs, rules) => {
     const negative = on('DOCTOR_NEGATIVE_FEEDBACK');
     const rxDrop = on('DOCTOR_RX_SHARE_DROP');
     const overdueRule = on('DOCTOR_VERIFICATION_OVERDUE');
-    const GPS_RULES = { OUTSIDE_GEOFENCE: 'GPS_OUTSIDE_GEOFENCE', SAME_SPOT: 'GPS_SAME_SPOT', IMPOSSIBLE_TRAVEL: 'GPS_IMPOSSIBLE_TRAVEL', MOCK_GPS: 'GPS_MOCK', NO_GPS: 'GPS_NO_GPS' };
+    const GPS_RULES = { OUTSIDE_GEOFENCE: 'GPS_OUTSIDE_GEOFENCE', SAME_SPOT: 'GPS_SAME_SPOT', IMPOSSIBLE_TRAVEL: 'GPS_IMPOSSIBLE_TRAVEL', MOCK_GPS: 'GPS_MOCK', NO_GPS: 'GPS_NO_GPS', DAY_START_OUTSIDE: 'GPS_OUTSIDE_TERRITORY', VISIT_OUTSIDE_TERRITORY: 'GPS_OUTSIDE_TERRITORY', DRIVE_BY: 'GPS_DRIVE_BY' };
     const gpsRules = Object.fromEntries(Object.entries(GPS_RULES).map(([type, code]) => [type, on(code)]).filter(([, rule]) => rule));
     const gpsDays = Math.max(0, ...Object.values(gpsRules).map((rule) => rule.t1 || 30));
     const stockRules = [on('STOCK_OUT'), on('STOCK_LOW_COVER'), on('STOCK_OVERSTOCK')];

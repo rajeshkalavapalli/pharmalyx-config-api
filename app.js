@@ -79,6 +79,9 @@ const HR = require('./controllers/HR');
 const DoctorRequests = require('./controllers/DoctorRequests');
 
 const DoctorVerification = require('./controllers/DoctorVerification');
+const VerifiedWork = require('./controllers/VerifiedWork');
+const BusinessTracking = require('./controllers/BusinessTracking');
+const OrderChecks = require('./controllers/BusinessTracking/orderChecks');
 
 const { poolPromise } = require('./db');
 const { authenticate } = require('./utils/auth');
@@ -128,10 +131,14 @@ app.use('/app', Approvals)
 app.use('/app', HR)
 app.use('/app', DoctorRequests)
 app.use('/app', DoctorVerification)
+app.use('/app', VerifiedWork)
+app.use('/app', BusinessTracking)
 
 
 
 
 app.listen(5000, ()=>{
     console.log("Pharmalyx Config API running on port 5000")
+    // Background order checks (no reorder, month-end spike): flags for head office only.
+    OrderChecks.startScheduler();
 })

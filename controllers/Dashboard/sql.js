@@ -74,7 +74,7 @@ module.exports = {
     GET_TODAY_PLAN: () => {
         return `
             SELECT TOP (1)
-                d.DayType,
+                REPLACE(d.DayType, '_', '-') AS DayType,
                 t.TerritoryName,
                 a.AreaName
             FROM dbo.TourPlan tp
@@ -366,7 +366,7 @@ module.exports = {
                 (SELECT CONVERT(VARCHAR(5), MIN(v.StartTime), 108) FROM dbo.Visits v WHERE v.UserId = u.UserId AND v.VisitDate = @Today) AS FirstVisit,
                 (SELECT CONVERT(VARCHAR(5), MAX(v.StartTime), 108) FROM dbo.Visits v WHERE v.UserId = u.UserId AND v.VisitDate = @Today) AS LastVisit,
                 (SELECT TOP 1 r.Status FROM dbo.DailyCallReports r WHERE r.UserId = u.UserId AND r.ReportDate = @Today) AS DcrStatus,
-                (SELECT TOP 1 d.DayType FROM dbo.TourPlan tp
+                (SELECT TOP 1 REPLACE(d.DayType, '_', '-') FROM dbo.TourPlan tp
                  INNER JOIN dbo.TourPlanDetails d ON d.TourPlanId = tp.TourPlanId
                  WHERE tp.UserId = u.UserId AND tp.PlanMonth = @MonthStart AND d.PlanDate = @Today) AS DayType,
                 (SELECT TOP 1 t.TerritoryName FROM dbo.TourPlan tp

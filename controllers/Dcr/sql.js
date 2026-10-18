@@ -85,7 +85,7 @@ module.exports = {
         return `
             SELECT
                 CONVERT(VARCHAR(10), d.PlanDate, 23) AS PlanDate,
-                d.DayType,
+                REPLACE(d.DayType, '_', '-') AS DayType,
                 t.TerritoryName,
                 a.AreaName
             FROM dbo.TourPlan tp

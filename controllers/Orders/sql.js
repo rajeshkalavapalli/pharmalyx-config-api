@@ -27,7 +27,15 @@ const ORDER_COLUMNS = `
     o.CreatedOn,
     o.ConfirmedOn,
     o.SuppliedOn,
-    o.CancelledOn
+    o.CancelledOn,
+    CASE WHEN o.SlipStorageKey IS NULL THEN 0 ELSE 1 END AS HasSlip,
+    o.DistanceFromChemistM,
+    o.BookedLatitude,
+    o.BookedLongitude,
+    o.FollowUpOn,
+    COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(fu.FirstName, ' ', fu.LastName))), ''), fu.UserName) AS FollowUpByName,
+    o.VerifiedOn,
+    COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(vb.FirstName, ' ', vb.LastName))), ''), vb.UserName) AS VerifiedByName
 `;
 
 const ORDER_JOINS = `
@@ -36,9 +44,40 @@ const ORDER_JOINS = `
     LEFT JOIN dbo.Doctor d ON d.DoctorId = o.DoctorId
     LEFT JOIN dbo.Pharmacy ph ON ph.PharmacyId = o.PharmacyId
     LEFT JOIN dbo.Stockist s ON s.StockistId = o.StockistId
+    LEFT JOIN Users fu ON fu.UserId = o.FollowUpBy
+    LEFT JOIN Users vb ON vb.UserId = o.VerifiedBy
 `;
 
 module.exports = {
+    // The chemist's location is saved from the first POB booked there (only if not set yet).
+    PIN_PHARMACY: () => {
+        return `
+            UPDATE dbo.Pharmacy SET Latitude = @Latitude, Longitude = @Longitude, GpsAccuracy = @Accuracy, GpsCapturedAt = @Now, GpsCapturedBy = @UserId
+            WHERE PharmacyId = @PharmacyId AND Latitude IS NULL
+        `;
+    },
+
+    // Manager verifies a supplied order (one tap).
+    VERIFY_ORDER: () => {
+        return `
+            UPDATE dbo.Orders SET VerifiedBy = @UserId, VerifiedOn = @Now, ModifiedBy = @UserId, ModifiedOn = @Now
+            WHERE OrderId = @OrderId AND Status = 'SUPPLIED' AND VerifiedOn IS NULL
+        `;
+    },
+
+    // Team orders still Raised after N days: the manager follows them up.
+    FOLLOW_UP_DUE: () => {
+        return `
+            SELECT o.OrderId AS Id, o.OrderNumber, COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(u.FirstName, ' ', u.LastName))), ''), u.UserName) AS UserName,
+                   COALESCE(d.DoctorName, ph.PharmacyName) AS CustomerName, o.NetAmount, o.CreatedOn AS SubmittedOn, CONVERT(VARCHAR(10), o.OrderDate, 23) AS OrderDate
+            FROM dbo.Orders o
+            INNER JOIN Users u ON u.UserId = o.UserId
+            LEFT JOIN dbo.Doctor d ON d.DoctorId = o.DoctorId
+            LEFT JOIN dbo.Pharmacy ph ON ph.PharmacyId = o.PharmacyId
+            WHERE o.Status = 'BOOKED' AND u.ManagerId = @UserId AND o.OrderDate <= DATEADD(DAY, -@Days, CAST(SYSDATETIME() AS DATE))
+        `;
+    },
+
     GET_ORDERS: () => {
         return `
             SELECT ${ORDER_COLUMNS}
@@ -76,7 +115,7 @@ module.exports = {
 
     GET_ORDER: () => {
         return `
-            SELECT ${ORDER_COLUMNS}, u.ManagerId
+            SELECT ${ORDER_COLUMNS}, u.ManagerId, o.SlipStorageKey, o.SlipContentType
             ${ORDER_JOINS}
             WHERE o.OrderId = @OrderId
         `;
@@ -103,7 +142,7 @@ module.exports = {
 
     GET_MY_PHARMACIES: () => {
         return `
-            SELECT ph.PharmacyId, ph.PharmacyName, a.AreaName
+            SELECT ph.PharmacyId, ph.PharmacyName, a.AreaName, ph.Latitude, ph.Longitude
             FROM dbo.UserPharmacyMapping m
             INNER JOIN dbo.Pharmacy ph ON ph.PharmacyId = m.PharmacyId
             LEFT JOIN Areas a ON a.AreaId = ph.AreaId
@@ -146,10 +185,12 @@ module.exports = {
 
             INSERT INTO dbo.Orders (OrderId, OrderNumber, UserId, OrderDate, CustomerType, DoctorId, PharmacyId, StockistId,
                                     Status, TotalQuantity, TotalFreeQuantity, GrossAmount, DiscountAmount, NetAmount,
-                                    Remarks, CreatedOn, ModifiedBy, ModifiedOn)
+                                    Remarks, CreatedOn, ModifiedBy, ModifiedOn,
+                                    SlipStorageKey, SlipContentType, SlipSha256, SlipDHash, BookedLatitude, BookedLongitude, BookedAccuracy, DistanceFromChemistM)
             VALUES (@OrderId, CONCAT('POB-', FORMAT(@Seq, '000000')), @UserId, @OrderDate, @CustomerType, @DoctorId, @PharmacyId, @StockistId,
                     'BOOKED', @TotalQuantity, @TotalFreeQuantity, @GrossAmount, @DiscountAmount, @NetAmount,
-                    @Remarks, @Now, @UserId, @Now)
+                    @Remarks, @Now, @UserId, @Now,
+                    @SlipStorageKey, @SlipContentType, @SlipSha256, @SlipDHash, @BookedLatitude, @BookedLongitude, @BookedAccuracy, @DistanceFromChemistM)
         `;
     },
 
@@ -169,6 +210,8 @@ module.exports = {
             SET Status = @ToStatus,
                 StatusRemarks = @StatusRemarks,
                 ConfirmedOn = CASE WHEN @ToStatus = 'CONFIRMED' THEN @Now ELSE ConfirmedOn END,
+                FollowUpBy  = CASE WHEN @ToStatus = 'CONFIRMED' THEN @ModifiedBy ELSE FollowUpBy END,
+                FollowUpOn  = CASE WHEN @ToStatus = 'CONFIRMED' THEN @Now ELSE FollowUpOn END,
                 SuppliedOn  = CASE WHEN @ToStatus = 'SUPPLIED'  THEN @Now ELSE SuppliedOn END,
                 CancelledOn = CASE WHEN @ToStatus = 'CANCELLED' THEN @Now ELSE CancelledOn END,
                 ModifiedBy = @ModifiedBy,

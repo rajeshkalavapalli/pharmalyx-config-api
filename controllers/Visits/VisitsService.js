@@ -1,6 +1,8 @@
 const VisitsDA = require('./VisitsDA');
 const { checkVisit } = require('./gpsChecks');
 const StockService = require('../Stock/StockService');
+const VerifiedWork = require('../VerifiedWork/VerifiedWorkService');
+const VerifiedWorkDA = require('../VerifiedWork/VerifiedWorkDA');
 
 // A planned call for this doctor and day becomes "visited". Missing table = no-op
 // (SQL Server defers name resolution for tables that don't exist yet).
@@ -179,12 +181,14 @@ exports.getVisits = async (actingUserId, query) => {
         throw fail(400, `The date range cannot exceed ${MAX_RANGE_DAYS} days.`);
     }
 
-    return VisitsDA.getVisits({
+    const visits = await VisitsDA.getVisits({
         UserId: targetUserId,
         FromDate: fromDate,
         ToDate: toDate,
         DoctorId: optionalGuid(query.doctorId, 'Doctor'),
     });
+
+    return visits.map((visit) => ({ ...visit, ...VerifiedWork.describeReasons(visit.InvalidReasons) }));
 };
 
 exports.getVisitById = async (actingUserId, visitId) => {
@@ -205,7 +209,7 @@ exports.getVisitById = async (actingUserId, visitId) => {
     // Stock tables may not exist yet on older databases.
     const items = await StockService.getVisitItems(visit.VisitId).catch(() => []);
 
-    return { ...visit, Items: items };
+    return { ...visit, ...VerifiedWork.describeReasons(visit.InvalidReasons), Items: items };
 };
 
 exports.getFollowUps = async (actingUserId, userId) => {
@@ -308,13 +312,35 @@ exports.createVisit = async (actingUserId, payload) => {
         throw fail(400, 'Follow-up date cannot be before the visit date.');
     }
 
-    const location = normalizeLocation(payload.Location);
+    const savedLocation = normalizeLocation(payload.Location);
+
+    // Verified work: the live check-in (opening the visit at the clinic) and this save (check-out)
+    // decide whether the visit counts. The system decides; only head office can override.
+    const work = await VerifiedWork.judgeNewVisit({
+        userId: actingUserId,
+        doctor,
+        visitDate,
+        checkInId: blank(payload.CheckInId) ? null : String(payload.CheckInId),
+        location: payload.Location,
+        motion: payload.Motion,
+    });
+
+    // With a check-in, the visit's location is where the MR checked in.
+    const location = work.checkIn
+        ? {
+              LocationStatus: work.checkIn.lat != null ? 'CAPTURED' : 'NOT_CAPTURED',
+              Latitude: work.checkIn.lat,
+              Longitude: work.checkIn.lng,
+              LocationAccuracy: work.checkIn.accuracy,
+              LocationCapturedAt: work.checkIn.at,
+          }
+        : savedLocation;
 
     // GPS checks (flag only: never stops the visit being saved).
     const geofenceReason = blank(payload.GeofenceReason) ? null : String(payload.GeofenceReason).trim().slice(0, 300);
     let gps = { columns: { DistanceFromClinicM: null, GeofenceStatus: null, GeofenceReason: null, IsMockLocation: null }, flagQueries: [], flags: [] };
     try {
-        gps = await checkVisit({ userId: actingUserId, visitId, doctor, location, isMock: payload.Location?.isMock === true, reason: geofenceReason });
+        gps = await checkVisit({ userId: actingUserId, visitId, doctor, location, isMock: payload.Location?.isMock === true || Boolean(work.checkIn?.isMock), reason: geofenceReason });
     } catch (error) {
         console.error('GPS checks skipped for visit', visitId, error.message);
     }
@@ -330,7 +356,11 @@ exports.createVisit = async (actingUserId, payload) => {
     let deviationId = null;
     let deviation = null;
 
-    if ((planStatus === 'OUT_OF_PLAN' || planStatus === 'OFF_DAY') && doctor.TerritoryId) {
+    // Inside the MR's own territory, changing the day's patch needs no approval, so no deviation is raised.
+    const ownAreas = planStatus === 'OUT_OF_PLAN' || planStatus === 'OFF_DAY' ? await VerifiedWorkDA.myAreas(actingUserId).catch(() => []) : [];
+    const insideOwnArea = ownAreas.some((area) => sameId(area.AreaId, doctor.AreaId));
+
+    if ((planStatus === 'OUT_OF_PLAN' || planStatus === 'OFF_DAY') && doctor.TerritoryId && !insideOwnArea) {
         const match = await VisitsDA.findDeviation({
             UserId: actingUserId,
             DeviationDate: visitDate,
@@ -370,9 +400,16 @@ exports.createVisit = async (actingUserId, payload) => {
         visitId,
         visitDate,
         items,
+        jointWorkUserId,
+        location,
     });
 
     const now = new Date();
+
+    // Times shown on the visit come from the server check-in / check-out when the MR didn't type them.
+    const istTime = (date) => new Date(new Date(date).getTime() + 330 * 60000).toISOString().slice(11, 16);
+    const autoStart = !startTime && !endTime && work.checkIn ? istTime(work.checkIn.at) : null;
+    const autoEnd = autoStart && istTime(work.columns.CheckOutAt) > autoStart ? istTime(work.columns.CheckOutAt) : null;
 
     try {
         await VisitsDA.createVisit(
@@ -381,8 +418,8 @@ exports.createVisit = async (actingUserId, payload) => {
                 UserId: actingUserId,
                 DoctorId: doctorId,
                 VisitDate: visitDate,
-                StartTime: startTime,
-                EndTime: endTime,
+                StartTime: startTime || autoStart,
+                EndTime: endTime || autoEnd,
                 JointWorkUserId: jointWorkUserId,
                 Feedback: feedback,
                 Notes: notes || null,
@@ -396,11 +433,17 @@ exports.createVisit = async (actingUserId, payload) => {
                 RecordedAt: optionalTimestamp(payload.RecordedAt) || now,
                 CreatedOn: now,
                 ...gps.columns,
+                ...work.columns,
             },
             deviation,
-            [...distribution, markPreCallVisited({ UserId: actingUserId, DoctorId: doctorId, VisitDate: visitDate, VisitId: visitId }), ...gps.flagQueries]
+            [...distribution, markPreCallVisited({ UserId: actingUserId, DoctorId: doctorId, VisitDate: visitDate, VisitId: visitId }),
+                ...gps.flagQueries,
+                ...(work.checkIn ? [VerifiedWork.useCheckInQuery(work.checkIn.id, visitId)] : []),
+                ...VerifiedWork.flagQueries(work.flags, visitId),
+            ]
         );
     } catch (error) {
+        if (error.number === 50409) throw fail(409, error.message);
         throw StockService.mapDbError(error);
     }
 
@@ -411,5 +454,8 @@ exports.createVisit = async (actingUserId, payload) => {
         deviationCreated: Boolean(deviation),
         geofence: { status: gps.columns.GeofenceStatus, distance: gps.columns.DistanceFromClinicM },
         gpsFlags: gps.flags.map((item) => ({ type: item.FlagType, severity: item.Severity, details: item.Details })),
+        validity: work.decision.validity,
+        ...VerifiedWork.describeReasons(work.columns.InvalidReasons),
+        dwellSeconds: work.decision.dwellSeconds,
     };
 };

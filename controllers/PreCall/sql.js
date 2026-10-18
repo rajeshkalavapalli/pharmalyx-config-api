@@ -3,7 +3,7 @@ module.exports = {
     GET_DAY_PLAN: () => {
         return `
             SELECT TOP (1)
-                d.DayType,
+                REPLACE(d.DayType, '_', '-') AS DayType,
                 d.TerritoryId,
                 t.TerritoryName,
                 d.AreaId,

@@ -17,12 +17,22 @@ exports.getMyStockists = (UserId) => customQuery(sql.GET_MY_STOCKISTS(), { UserI
 
 exports.getOrderableProducts = () => customQuery(sql.GET_ORDERABLE_PRODUCTS());
 
-// Header and lines are saved together or not at all.
-exports.createOrder = (order, lines) =>
+// Header and lines (and any extra steps, e.g. pinning the chemist, the audit row) are saved together or not at all.
+exports.createOrder = (order, lines, extra = []) =>
     runInTransaction([
         { sqlQuery: sql.CREATE_ORDER(), inputs: order },
         ...lines.map((line) => ({ sqlQuery: sql.CREATE_LINE(), inputs: line })),
+        ...extra,
     ]);
+
+exports.pinPharmacyQuery = (inputs) => ({ sqlQuery: sql.PIN_PHARMACY(), inputs });
+
+exports.verifyOrder = async (inputs) => {
+    const result = await customQuery(sql.VERIFY_ORDER(), inputs);
+    return Array.isArray(result) ? result[0] || 0 : 0;
+};
+
+exports.followUpDue = (UserId, Days) => customQuery(sql.FOLLOW_UP_DUE(), { UserId, Days });
 
 // Returns the number of rows changed (0 when the status moved on meanwhile).
 exports.updateStatus = async (inputs) => {
