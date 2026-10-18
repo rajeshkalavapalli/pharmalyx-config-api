@@ -1,4 +1,12 @@
+const crypto = require('crypto');
+
 const OrdersDA = require('./OrdersDA');
+const OrderChecks = require('../BusinessTracking/orderChecks');
+const { loadSettings } = require('../BusinessTracking/settings');
+const fileStore = require('../../utils/fileStore');
+const { auditQuery, writeAudit } = require('../../utils/audit');
+const { getPermissions } = require('../../utils/permissions');
+const { distanceMeters } = require('../../utils/doctorMatching');
 
 const { generateUUID } = require('../../utils/commonUtils');
 const {
@@ -18,19 +26,30 @@ const MAX_QUANTITY = 100000;
 
 const CUSTOMER_TYPES = ['DOCTOR', 'CHEMIST'];
 
-// Allowed moves. SUPPLIED and CANCELLED are final.
+// POB workflow (follow-up only, never used for incentives):
+//   Raised (BOOKED) -> Under follow-up (CONFIRMED, manager) -> Supplied (MR, one tap) -> Verified (manager, one tap)
+// Who may make each move: OWNER = the MR who booked it, MANAGER = their reporting manager.
 const TRANSITIONS = {
-    BOOKED: ['CONFIRMED', 'CANCELLED'],
+    BOOKED: ['CONFIRMED', 'SUPPLIED', 'CANCELLED'],
     CONFIRMED: ['SUPPLIED', 'CANCELLED'],
     SUPPLIED: [],
     CANCELLED: [],
 };
 
+const MOVED_BY = { CONFIRMED: 'MANAGER', SUPPLIED: 'OWNER', CANCELLED: 'OWNER', VERIFIED: 'MANAGER' };
+
 const STATUS_MESSAGES = {
-    CONFIRMED: 'confirmed by the stockist',
+    CONFIRMED: 'put under follow-up',
     SUPPLIED: 'marked as supplied',
     CANCELLED: 'cancelled',
+    VERIFIED: 'verified',
 };
+
+const MAX_SLIP_BYTES = 5 * 1024 * 1024;
+const SLIP_ID = /^[0-9a-f-]{36}\.(jpg|png|webp)$/i;
+const DHASH = /^[0-9a-f]{16}$/i;
+const slipKey = (userId, photoId) => `pob/${String(userId).toLowerCase()}/${String(photoId).toLowerCase()}`;
+const sha256 = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
 
 const addDays = (key, days) => {
     const date = new Date(`${key}T00:00:00`);
@@ -99,6 +118,12 @@ const normalizeOrder = (order, lines = []) => ({
     NetAmount: money(order.NetAmount),
     Remarks: order.Remarks,
     StatusRemarks: order.StatusRemarks,
+    HasSlip: Boolean(order.HasSlip),
+    DistanceFromChemistM: order.DistanceFromChemistM,
+    FollowUpOn: order.FollowUpOn,
+    FollowUpByName: order.FollowUpByName,
+    VerifiedOn: order.VerifiedOn,
+    VerifiedByName: order.VerifiedByName,
     CreatedOn: order.CreatedOn,
     ConfirmedOn: order.ConfirmedOn,
     SuppliedOn: order.SuppliedOn,
@@ -179,8 +204,10 @@ exports.getOrders = async (actingUserId, query) => {
     });
 
     const orders = rows.map((row) => normalizeOrder(row, linesByOrder.get(lower(row.OrderId))));
+    const settings = await loadSettings();
+    const followUpDue = hasTeam ? await OrdersDA.followUpDue(actingUserId, settings.FOLLOW_UP_AFTER_DAYS).catch(() => []) : [];
 
-    return { month: fromDate, scope, hasTeam, summary: summarize(orders), orders };
+    return { month: fromDate, scope, hasTeam, summary: summarize(orders), orders, followUpDue, followUpAfterDays: settings.FOLLOW_UP_AFTER_DAYS };
 };
 
 // Everything the booking form needs, limited to what's mapped to the MR.
@@ -201,6 +228,7 @@ exports.getOptions = async (actingUserId) => {
         products: products.map((product) => ({ ...product, UnitPrice: money(product.UnitPrice) })),
         maxBackdateDays: MAX_BACKDATE_DAYS,
         maxLines: MAX_LINES,
+        chemistRadius: (await loadSettings()).CHEMIST_RADIUS_METERS,
     };
 };
 
@@ -237,6 +265,55 @@ exports.createOrder = async (actingUserId, payload) => {
     }
     if (!has(options.stockists, 'StockistId', payload.StockistId)) {
         throw fail(400, 'This stockist is not assigned to you.');
+    }
+
+    // Chemist POB: in-app photo of the stamped slip, booked at the chemist (GPS, date, time, MR saved automatically).
+    let slip = { SlipStorageKey: null, SlipContentType: null, SlipSha256: null, SlipDHash: null };
+    let booked = { BookedLatitude: null, BookedLongitude: null, BookedAccuracy: null, DistanceFromChemistM: null };
+    const extra = [];
+    let pharmacy = null;
+
+    if (customerType === 'CHEMIST') {
+        pharmacy = options.pharmacies.find((item) => sameId(item.PharmacyId, customerId));
+        if (orderDate !== today) throw fail(400, 'Chemist orders are booked on the day, at the chemist.');
+
+        if (!SLIP_ID.test(String(payload.SlipPhotoId || ''))) throw fail(400, "Take a photo of the chemist's stamped order slip.");
+        const key = slipKey(actingUserId, payload.SlipPhotoId);
+        const buffer = await fileStore.get(key).catch(() => null);
+        if (!buffer) throw fail(400, 'The slip photo was not found. Take it again.');
+        const type = fileStore.sniffImage(buffer);
+        slip = {
+            SlipStorageKey: key,
+            SlipContentType: type?.contentType || 'image/jpeg',
+            SlipSha256: sha256(buffer),
+            SlipDHash: DHASH.test(String(payload.SlipDHash || '')) ? String(payload.SlipDHash).toLowerCase() : null,
+        };
+
+        const location = payload.Location || {};
+        if (String(location.status || '').toUpperCase() !== 'CAPTURED') throw fail(400, 'Turn on location: the order must be booked at the chemist.');
+        const lat = Number(location.latitude);
+        const lng = Number(location.longitude);
+        const accuracy = location.accuracy == null ? null : Math.round(Number(location.accuracy));
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw fail(400, 'Location is invalid.');
+        if (location.isMock === true) throw fail(400, 'Fake (mock) GPS is not allowed for booking orders.');
+
+        const settings = await loadSettings();
+        const radius = settings.CHEMIST_RADIUS_METERS;
+
+        if (pharmacy?.Latitude != null) {
+            const distance = Math.round(distanceMeters(lat, lng, Number(pharmacy.Latitude), Number(pharmacy.Longitude)));
+            if (distance - Math.min(accuracy || 0, 100) > radius) {
+                throw fail(400, `You are about ${distance} m from ${pharmacy.PharmacyName}. Book the order at the chemist (within ${radius} m).`);
+            }
+            booked.DistanceFromChemistM = distance;
+        } else {
+            // First POB at this chemist: its location is saved from this booking (and logged).
+            if (accuracy == null || accuracy > 100) throw fail(400, 'GPS is too weak to save the chemist location. Wait for a better fix (under 100 m) and try again.');
+            extra.push(OrdersDA.pinPharmacyQuery({ PharmacyId: customerId, Latitude: Number(lat.toFixed(6)), Longitude: Number(lng.toFixed(6)), Accuracy: accuracy, Now: new Date(), UserId: actingUserId }));
+            extra.push(auditQuery({ entityType: 'PHARMACY', entityId: customerId, action: 'PIN_LOCATION', actorId: actingUserId, after: { lat, lng, accuracy, source: 'first POB' } }));
+            booked.DistanceFromChemistM = 0;
+        }
+        booked = { ...booked, BookedLatitude: Number(lat.toFixed(6)), BookedLongitude: Number(lng.toFixed(6)), BookedAccuracy: accuracy };
     }
 
     const rawLines = Array.isArray(payload.Lines) ? payload.Lines : [];
@@ -301,11 +378,31 @@ exports.createOrder = async (actingUserId, payload) => {
             NetAmount: toRupees(totals.net),
             Remarks: optionalText(payload.Remarks, 500, 'Remarks'),
             Now: new Date(),
+            ...slip,
+            ...booked,
         },
-        lines
+        lines,
+        extra
     );
 
     const saved = await OrdersDA.getOrder(orderId);
+
+    // Background checks (inflated quantity, large first order, same slip photo): flags only.
+    const productName = new Map(options.products.map((product) => [lower(product.ProductId), product.ProductName]));
+    OrderChecks.checkNewOrder(
+        {
+            OrderId: orderId,
+            OrderNumber: saved.OrderNumber,
+            UserId: actingUserId,
+            PharmacyId: customerType === 'CHEMIST' ? customerId : null,
+            PharmacyName: pharmacy?.PharmacyName || saved.CustomerName,
+            NetAmount: toRupees(totals.net),
+            CreatedOn: saved.CreatedOn,
+            SlipSha256: slip.SlipSha256,
+            SlipDHash: slip.SlipDHash,
+        },
+        lines.map((line) => ({ ProductId: line.ProductId, ProductName: productName.get(lower(line.ProductId)) || 'product', Quantity: line.Quantity }))
+    ).catch((error) => console.error('Order checks failed for', saved.OrderNumber, error.message));
 
     return { message: `Order ${saved.OrderNumber} booked.`, OrderId: orderId, OrderNumber: saved.OrderNumber };
 };
@@ -323,11 +420,24 @@ exports.updateStatus = async (actingUserId, orderId, payload) => {
     const order = await OrdersDA.getOrder(orderId);
     if (!order) throw fail(404, 'Order not found.');
 
-    if (!sameId(order.UserId, actingUserId) && !sameId(order.ManagerId, actingUserId)) {
-        throw fail(403, 'Only the MR who booked this order or their manager can update it.');
-    }
+    const isOwner = sameId(order.UserId, actingUserId);
+    const isManager = sameId(order.ManagerId, actingUserId) && !isOwner;
+    if (!isOwner && !isManager) throw fail(403, 'Only the MR who booked this order or their manager can update it.');
 
     const toStatus = String(payload.Status || '').toUpperCase();
+    const mover = MOVED_BY[toStatus];
+    if (mover === 'OWNER' && !isOwner) throw fail(403, `Only the MR who booked the order can mark it ${toStatus === 'SUPPLIED' ? 'supplied' : 'cancelled'}.`);
+    if (mover === 'MANAGER' && !isManager) throw fail(403, 'Only the reporting manager can do this.');
+
+    if (toStatus === 'VERIFIED') {
+        if (order.Status !== 'SUPPLIED') throw fail(409, 'Only a supplied order can be verified.');
+        if (order.VerifiedOn) throw fail(409, 'This order is already verified.');
+        const done = await OrdersDA.verifyOrder({ OrderId: order.OrderId, UserId: actingUserId, Now: new Date() });
+        if (!done) throw fail(409, 'This order was updated by someone else. Refresh and try again.');
+        await writeAudit({ entityType: 'ORDER', entityId: order.OrderId, action: 'VERIFIED', actorId: actingUserId });
+        return { message: `Order ${order.OrderNumber} verified.` };
+    }
+
     if (!(TRANSITIONS[order.Status] || []).includes(toStatus)) {
         throw fail(409, `A ${order.Status.toLowerCase()} order cannot be ${STATUS_MESSAGES[toStatus] || 'changed to that status'}.`);
     }
@@ -345,6 +455,33 @@ exports.updateStatus = async (actingUserId, orderId, payload) => {
     });
 
     if (!changed) throw fail(409, 'This order was updated by someone else. Refresh and try again.');
+    await writeAudit({ entityType: 'ORDER', entityId: order.OrderId, action: toStatus, actorId: actingUserId, reason: remarks, before: { status: order.Status }, after: { status: toStatus } });
 
     return { message: `Order ${order.OrderNumber} ${STATUS_MESSAGES[toStatus]}.` };
+};
+
+// =========================================================
+// SLIP PHOTO (in-app camera only; uploaded first, attached when the order is booked)
+// =========================================================
+
+exports.uploadSlip = async (actingUserId, buffer) => {
+    requireActingUser(actingUserId);
+    if (!Buffer.isBuffer(buffer) || !buffer.length) throw fail(400, 'No photo received.');
+    if (buffer.length > MAX_SLIP_BYTES) throw fail(413, 'Photo is larger than 5 MB.');
+    const type = fileStore.sniffImage(buffer);
+    if (!type) throw fail(400, 'Only JPEG, PNG or WebP photos are accepted.');
+    const photoId = `${generateUUID()}.${type.ext}`;
+    await fileStore.put(slipKey(actingUserId, photoId), buffer);
+    return { photoId };
+};
+
+// The MR, their manager, or head office (business.approve) can see the slip.
+exports.getSlip = async (actingUserId, orderId) => {
+    requireActingUser(actingUserId);
+    if (!isGuid(orderId)) throw fail(400, 'Order is invalid.');
+    const order = await OrdersDA.getOrder(orderId);
+    if (!order || !order.SlipStorageKey) throw fail(404, 'No slip photo for this order.');
+    const allowed = sameId(order.UserId, actingUserId) || sameId(order.ManagerId, actingUserId) || (await getPermissions(actingUserId)).has('business.approve');
+    if (!allowed) throw fail(403, 'You cannot see this slip.');
+    return { buffer: await fileStore.get(order.SlipStorageKey), contentType: order.SlipContentType || 'image/jpeg' };
 };

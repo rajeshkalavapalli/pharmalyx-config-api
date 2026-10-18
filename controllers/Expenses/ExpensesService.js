@@ -1,4 +1,5 @@
 const ExpensesDA = require('./ExpensesDA');
+const Allowances = require('../VerifiedWork/allowances');
 
 const { generateUUID } = require('../../utils/commonUtils');
 const { getPermissions } = require('../../utils/permissions');
@@ -9,7 +10,6 @@ const MONTHS_BACK = 2;
 const MAX_ITEM_AMOUNT = 100000;
 const MAX_RATE = 100000;
 
-const STATIONS = ['HQ', 'EX_HQ', 'OUTSTATION'];
 const ITEM_TYPES = { COURIER: 'Courier', STATIONERY: 'Stationery', MEETING_TRAVEL: 'Special meeting travel', MISC: 'Miscellaneous' };
 const EDITABLE = ['DRAFT', 'RETURNED'];
 const FINANCE_STATUSES = ['MANAGER_APPROVED', 'APPROVED', 'PAID'];
@@ -64,32 +64,38 @@ const priceDay = (rate, stationType, travelMode, distanceKm) => {
     return { da, ta };
 };
 
-// One row per approved DCR day, keeping the MR's chosen station type and remarks.
-const buildDays = (dcrs, saved, rate, claimId, overrides = new Map()) => {
+// One row per day of verified work (at least one valid visit). Nothing here comes from the MR's claim:
+//   TA = km actually travelled in work hours x the company rate for the day's travel mode
+//   DA = only when the day has enough valid visits; HQ / Ex-HQ / Outstation from the STP patches visited
+// The MR may add remarks only.
+const buildDays = (facts, saved, rate, claimId, remarksByDate = new Map()) => {
     const savedByDate = new Map(saved.map((day) => [day.ExpenseDate, day]));
 
-    return dcrs.map((dcr) => {
-        const previous = savedByDate.get(dcr.ReportDate);
-        const override = overrides.get(dcr.ReportDate);
-        const stationType = override?.StationType || previous?.StationType || 'HQ';
-        const remarks = override ? override.Remarks : previous?.Remarks || null;
-        const amounts = rate ? priceDay(rate, stationType, dcr.TravelMode, dcr.DistanceKm) : { da: 0, ta: 0 };
+    return facts.map((fact) => {
+        const previous = savedByDate.get(fact.date);
+        const remarks = remarksByDate.has(fact.date) ? remarksByDate.get(fact.date) : previous?.Remarks || null;
+        const amounts = rate ? priceDay(rate, fact.station, fact.travelMode, fact.km) : { da: 0, ta: 0 };
 
         return {
             DayId: generateUUID(),
             ClaimId: claimId,
-            DcrId: dcr.DcrId,
-            ExpenseDate: dcr.ReportDate,
-            StationType: stationType,
-            TravelMode: dcr.TravelMode || 'OTHER',
-            DistanceKm: Number(dcr.DistanceKm || 0),
-            DaAmount: toRupees(amounts.da),
+            DcrId: fact.dcrId,
+            ExpenseDate: fact.date,
+            StationType: fact.station,
+            TravelMode: fact.travelMode,
+            DistanceKm: fact.km,
+            DaAmount: fact.daEligible ? toRupees(amounts.da) : 0,
             TaAmount: toRupees(amounts.ta),
             Remarks: remarks,
-            VisitCount: dcr.VisitCount,
+            VerifiedKm: fact.km,
+            ValidVisits: fact.validVisits,
+            DaEligible: fact.daEligible ? 1 : 0,
+            VisitCount: fact.validVisits,
         };
     });
 };
+
+const workFacts = (userId, month) => Allowances.dayFacts(userId, month, monthEnd(month));
 
 const normalizeDay = (day) => ({
     DayId: day.DayId,
@@ -103,7 +109,10 @@ const normalizeDay = (day) => ({
     ApprovedDa: money(day.ApprovedDa),
     ApprovedTa: money(day.ApprovedTa),
     Remarks: day.Remarks,
-    VisitCount: day.VisitCount ?? null,
+    VisitCount: day.VisitCount ?? day.ValidVisits ?? null,
+    VerifiedKm: day.VerifiedKm == null ? null : Number(day.VerifiedKm),
+    ValidVisits: day.ValidVisits ?? null,
+    DaEligible: day.DaEligible == null ? null : Boolean(day.DaEligible),
 });
 
 const normalizeItem = (item) => ({ ...item, Amount: money(item.Amount), ApprovedAmount: money(item.ApprovedAmount), TypeLabel: ITEM_TYPES[item.ExpenseType] });
@@ -178,19 +187,20 @@ exports.getMyClaim = async (actingUserId, query) => {
     const user = await loadUser(actingUserId);
     const month = toMonthStart(query.month || currentMonth().slice(0, 7));
 
-    const [claim, rate, dcrs, hasTeam] = await Promise.all([
+    const [claim, rate, facts, hasTeam, daMinValidVisits] = await Promise.all([
         ExpensesDA.getClaim(user.UserId, month),
         ExpensesDA.getRate(user.DesignationId),
-        ExpensesDA.getApprovedDcrs(user.UserId, month, monthEnd(month)),
+        workFacts(user.UserId, month),
         ExpensesDA.hasTeam(user.UserId),
+        Allowances.daMinValidVisits(),
     ]);
 
     const [saved, items] = claim ? await Promise.all([ExpensesDA.getDays(claim.ClaimId), ExpensesDA.getItems(claim.ClaimId)]) : [[], []];
     const status = claim?.Status || 'NOT_STARTED';
     const editable = !claim || EDITABLE.includes(claim.Status);
 
-    // While editable, days follow the approved DCRs live; afterwards they're the submitted snapshot.
-    const days = (editable ? buildDays(dcrs, saved, normalizeRate(rate), claim?.ClaimId) : saved).map(normalizeDay);
+    // While editable, days follow verified work live; afterwards they're the submitted snapshot.
+    const days = (editable ? buildDays(facts, saved, normalizeRate(rate), claim?.ClaimId) : saved).map(normalizeDay);
     const normalizedItems = items.map(normalizeItem);
     const totals = totalsOf(days, normalizedItems);
 
@@ -202,6 +212,8 @@ exports.getMyClaim = async (actingUserId, query) => {
         month,
         status,
         hasTeam,
+        daMinValidVisits,
+        verified: true,
         designation: user.DesignationName,
         rate: normalizeRate(rate),
         claim: normalizeClaim(claim),
@@ -226,19 +238,18 @@ exports.saveDays = async (actingUserId, payload) => {
     const rate = normalizeRate(await ExpensesDA.getRate(user.DesignationId));
     if (!rate) throw fail(409, 'No DA / TA rate card is set for your designation. Ask your administrator.');
 
-    const overrides = new Map();
+    // HQ / Ex-HQ / Outstation now come from the patches actually visited; the MR adds remarks only.
+    const remarksByDate = new Map();
     (Array.isArray(payload.Days) ? payload.Days : []).forEach((day) => {
         const date = toDateKey(day?.ExpenseDate, 'Day');
-        const stationType = String(day.StationType || '').toUpperCase();
-        if (!STATIONS.includes(stationType)) throw fail(400, `${date}: choose HQ, Ex-HQ or Outstation.`);
-        overrides.set(date, { StationType: stationType, Remarks: optionalText(day.Remarks, 300, `${date} remarks`) });
+        remarksByDate.set(date, optionalText(day.Remarks, 300, `${date} remarks`));
     });
 
     const claim = await ensureClaim(user, month);
     requireEditable(claim);
 
-    const [dcrs, saved] = await Promise.all([ExpensesDA.getApprovedDcrs(user.UserId, month, monthEnd(month)), ExpensesDA.getDays(claim.ClaimId)]);
-    const days = buildDays(dcrs, saved, rate, claim.ClaimId, overrides).map(({ VisitCount, ...day }) => day);
+    const [facts, saved] = await Promise.all([workFacts(user.UserId, month), ExpensesDA.getDays(claim.ClaimId)]);
+    const days = buildDays(facts, saved, rate, claim.ClaimId, remarksByDate).map(({ VisitCount, ...day }) => day);
 
     try {
         await ExpensesDA.replaceDays(claim.ClaimId, user.UserId, days, new Date());
@@ -246,7 +257,7 @@ exports.saveDays = async (actingUserId, payload) => {
         throw lockedError(error);
     }
 
-    return { message: 'Daily allowances updated.' };
+    return { message: 'Remarks saved.' };
 };
 
 exports.addItem = async (actingUserId, payload) => {
@@ -334,15 +345,11 @@ exports.submit = async (actingUserId, payload) => {
     const claim = await ensureClaim(user, month);
     requireEditable(claim);
 
-    const [dcrs, saved, items] = await Promise.all([
-        ExpensesDA.getApprovedDcrs(user.UserId, month, monthEnd(month)),
-        ExpensesDA.getDays(claim.ClaimId),
-        ExpensesDA.getItems(claim.ClaimId),
-    ]);
+    const [facts, saved, items] = await Promise.all([workFacts(user.UserId, month), ExpensesDA.getDays(claim.ClaimId), ExpensesDA.getItems(claim.ClaimId)]);
 
-    const days = buildDays(dcrs, saved, rate, claim.ClaimId).map(({ VisitCount, ...day }) => day);
+    const days = buildDays(facts, saved, rate, claim.ClaimId).map(({ VisitCount, ...day }) => day);
     const totals = totalsOf(days, items.map(normalizeItem));
-    if (totals.total <= 0) throw fail(400, 'There is nothing to claim yet: no approved DCR days or expenses this month.');
+    if (totals.total <= 0) throw fail(400, 'There is nothing to claim yet: no days with valid visits or expenses this month.');
 
     if (rate.OtherMonthlyLimit != null && toPaise(totals.other) > toPaise(rate.OtherMonthlyLimit)) {
         throw fail(400, `Other expenses (₹${totals.other.toLocaleString('en-IN')}) exceed the monthly limit of ₹${rate.OtherMonthlyLimit.toLocaleString('en-IN')}.`);
@@ -417,7 +424,10 @@ exports.managerApprove = async (actingUserId, claimId, payload) => {
     if (claim.Status !== 'SUBMITTED') throw fail(409, 'Only a submitted claim can be reviewed.');
 
     const [days, items] = await Promise.all([ExpensesDA.getDays(claimId), ExpensesDA.getItems(claimId)]);
-    const dayAdjust = new Map((payload.Days || []).map((day) => [lower(day.DayId), day]));
+    if ((payload.Days || []).some((day) => day.ApprovedDa != null || day.ApprovedTa != null)) {
+        throw fail(400, 'TA and DA are calculated from verified work. Managers cannot change them; ask head office if something is wrong.');
+    }
+    const dayAdjust = new Map();
     const itemAdjust = new Map((payload.Items || []).map((item) => [lower(item.ItemId), item]));
 
     let reduced = false;

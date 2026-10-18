@@ -1,6 +1,9 @@
 const StockDA = require('./StockDA');
 
 const { generateUUID } = require('../../utils/commonUtils');
+const { auditQuery } = require('../../utils/audit');
+const { getPermissions } = require('../../utils/permissions');
+const VerifiedWorkDA = require('../VerifiedWork/VerifiedWorkDA');
 const {
     fail,
     isGuid,
@@ -153,8 +156,18 @@ exports.returnStock = async (actingUserId, payload) => {
 // =========================================================
 
 // Validates items given during a visit and returns transaction queries for them.
-exports.buildVisitDistribution = async ({ userId, doctorId, visitId, visitDate, items }) => {
+// Each entry is stamped with who gave it (name, role), when and the visit's GPS. If the joint-work
+// colleague (e.g. the manager) gave an item (GivenBy: 'JOINT'), it comes from their stock and is recorded as theirs.
+exports.buildVisitDistribution = async ({ userId, doctorId, visitId, visitDate, items, jointWorkUserId = null, location = null }) => {
     if (items == null) return [];
+
+    const givers = new Map();
+    const giver = async (id) => {
+        const key = String(id).toLowerCase();
+        if (!givers.has(key)) givers.set(key, await VerifiedWorkDA.getUser(id));
+        return givers.get(key);
+    };
+    const givenAt = new Date();
 
     if (!Array.isArray(items)) throw fail(400, 'Items given must be a list.');
     if (items.length > MAX_ITEMS_PER_VISIT) throw fail(400, `At most ${MAX_ITEMS_PER_VISIT} items per visit.`);
@@ -171,20 +184,30 @@ exports.buildVisitDistribution = async ({ userId, doctorId, visitId, visitDate, 
 
         if (!isGuid(item.ItemId)) throw fail(400, 'Item is invalid.');
 
+        const byJoint = String(item.GivenBy || '').toUpperCase() === 'JOINT';
+        if (byJoint && !jointWorkUserId) throw fail(400, 'Choose the joint-work colleague before marking an item as given by them.');
+        const holderId = byJoint ? jointWorkUserId : userId;
+        const person = await giver(holderId);
+
         queries.push(
-            StockDA.removeEntryQuery({
+            StockDA.giveEntryQuery({
                 EntryId: generateUUID(),
-                UserId: userId,
+                UserId: holderId,
                 ItemType: itemType,
                 ItemId: item.ItemId,
-                EntryType: 'DISTRIBUTION',
                 Quantity: toQuantity(item.Quantity, 1000),
                 DoctorId: doctorId,
                 VisitId: visitId,
-                Remarks: null,
+                Remarks: byJoint ? 'Given during joint work' : null,
                 EntryDate: visitDate,
                 CreatedBy: userId,
-                CreatedOn: new Date(),
+                CreatedOn: givenAt,
+                GivenByUserId: holderId,
+                GivenByName: person?.Name || null,
+                GivenByRole: person?.DesignationName || person?.RoleName || null,
+                GivenAt: givenAt,
+                GivenLatitude: location?.Latitude ?? null,
+                GivenLongitude: location?.Longitude ?? null,
             })
         );
     }
@@ -193,5 +216,64 @@ exports.buildVisitDistribution = async ({ userId, doctorId, visitId, visitDate, 
 };
 
 exports.mapDbError = mapDbError;
+
+// =========================================================
+// RECONCILIATION: issued vs given vs physical count
+// =========================================================
+
+// Lazy: VerifiedWorkService requires modules that require this one.
+const resolveTarget = (...args) => require('../VerifiedWork/VerifiedWorkService').resolveTarget(...args);
+
+exports.getReconciliation = async (actingUserId, query) => {
+    const userId = await resolveTarget(actingUserId, query.userId);
+    const [rows, history] = await Promise.all([StockDA.getReconciliation(userId), StockDA.getCountHistory(userId)]);
+
+    return {
+        userId,
+        items: rows.map((row) => ({
+            ...row,
+            Issued: number(row.Issued),
+            Given: number(row.Given),
+            Returned: number(row.Returned),
+            Expected: number(row.Expected),
+            LastCountDifference: row.LastCounted == null ? null : number(row.LastCounted) - number(row.LastCountExpected),
+        })),
+        history,
+    };
+};
+
+// Manager (of this MR) or head office records what is physically in the MR's bag.
+exports.recordCount = async (actingUserId, payload) => {
+    requireActingUser(actingUserId);
+    const userId = await resolveTarget(actingUserId, payload.UserId);
+    const permissions = await getPermissions(actingUserId);
+    if (!permissions.has('stockcount.create')) throw fail(403, "You don't have permission to record stock counts.");
+    if (String(userId).toLowerCase() === String(actingUserId).toLowerCase()) {
+        throw fail(403, 'Your own stock must be counted by your manager or head office.');
+    }
+
+    const counts = Array.isArray(payload.Counts) ? payload.Counts : [];
+    if (!counts.length) throw fail(400, 'Enter at least one counted item.');
+    const remarks = optionalText(payload.Remarks, 500, 'Remarks');
+    const now = new Date();
+
+    const rows = [];
+    for (const count of counts) {
+        const itemType = toItemType(count.ItemType);
+        if (!isGuid(count.ItemId)) throw fail(400, 'Item is invalid.');
+        const counted = Number(count.CountedQty);
+        if (!Number.isInteger(counted) || counted < 0 || counted > MAX_QUANTITY) throw fail(400, 'Counted quantity must be a whole number, 0 or more.');
+        const expected = await StockDA.getItemBalance({ UserId: userId, ItemType: itemType, ItemId: count.ItemId });
+        rows.push({ CountId: generateUUID(), UserId: userId, ItemType: itemType, ItemId: count.ItemId, ExpectedQty: expected, CountedQty: counted, CountedBy: actingUserId, CountedOn: now, Remarks: remarks });
+    }
+
+    await StockDA.insertCounts(
+        rows,
+        auditQuery({ entityType: 'STOCK_COUNT', entityId: userId, action: 'COUNT', actorId: actingUserId, reason: remarks, after: rows.map((r) => ({ item: r.ItemId, expected: r.ExpectedQty, counted: r.CountedQty })) })
+    );
+
+    const short = rows.filter((row) => row.CountedQty < row.ExpectedQty).length;
+    return { message: short ? `Count saved. ${short} item(s) are short of the expected quantity.` : 'Count saved. Everything matches.' };
+};
 
 exports.getVisitItems = (visitId) => StockDA.getVisitItems(visitId);

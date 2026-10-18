@@ -6,6 +6,8 @@ const LeaveService = require('../HR/LeaveService');
 const HRDA = require('../HR/HRDA');
 const DoctorRequestsDA = require('../DoctorRequests/DoctorRequestsDA');
 const DoctorVerificationDA = require('../DoctorVerification/DoctorVerificationDA');
+const OrdersDA = require('../Orders/OrdersDA');
+const { loadSettings: loadBusinessSettings } = require('../BusinessTracking/settings');
 
 const { getPermissions } = require('../../utils/permissions');
 const { fail, isGuid, optionalText, requireActingUser, todayKey } = require('../../utils/access');
@@ -21,6 +23,15 @@ const dayLabel = (day) => new Date(`${day}T00:00:00`).toLocaleDateString('en-GB'
 // type -> how to load, describe and (optionally) decide it here.
 // `permission`: only shown to users with it. `inline`: approve / return from the inbox.
 const TYPES = {
+    // POB still "Raised" after N days: the manager reminds the MR (opened on the POB screen).
+    POB_FOLLOW_UP: {
+        label: 'POB follow-up',
+        load: async (UserId) => OrdersDA.followUpDue(UserId, (await loadBusinessSettings()).FOLLOW_UP_AFTER_DAYS).catch(() => []),
+        permission: 'orders.view',
+        link: '/sales/orders',
+        inline: false,
+        describe: (row) => ({ period: `${row.OrderNumber}: ${row.CustomerName}`, summary: `${money(row.NetAmount)} · raised ${dayLabel(row.OrderDate)}, not marked supplied yet` }),
+    },
     TOUR_PLAN: {
         label: 'Tour plan',
         load: ApprovalsDA.getTourPlans,

@@ -2,10 +2,14 @@
 const sql = require('./sql');
 const { runInTransaction, customQuery } = require('../../utils/dbFunctions');
 
+// The app says "non-working"; the database (CK_TourPlanDetails_DayType) stores "non_working".
+// Reads turn it back with REPLACE(DayType, '_', '-').
+const toDbDayType = (dayType) => (dayType === 'non-working' ? 'non_working' : dayType);
+
 const detailQueries = (tourPlanId, details, now) =>
     details.map((detail) => ({
         sqlQuery: sql.CREATE_TOUR_PLAN_DETAILS(),
-        inputs: { ...detail, TourPlanId: tourPlanId, CreatedOn: now, ModifiedOn: null },
+        inputs: { ...detail, DayType: toDbDayType(detail.DayType), TourPlanId: tourPlanId, CreatedOn: now, ModifiedOn: null },
     }));
 
 exports.getStatusLovs = () => customQuery(sql.GET_STATUS_LOVS());
@@ -60,6 +64,14 @@ exports.updateTourPlan = async ({
         ...detailQueries(TourPlanId, details, ModifiedOn),
     ]);
 };
+
+// Replaces the plan's days and marks it approved (inside the territory: no manager approval needed).
+exports.replaceOwnPlan = async ({ TourPlanId, StatusId, Now, Remarks, details }) =>
+    await runInTransaction([
+        { sqlQuery: sql.APPROVE_OWN_PLAN(), inputs: { TourPlanId, StatusId, Now, Remarks } },
+        { sqlQuery: sql.DELETE_TOUR_PLAN_DETAILS(), inputs: { TourPlanId } },
+        ...detailQueries(TourPlanId, details, Now),
+    ]);
 
 exports.transitionStatus = async (inputs) =>
     await runInTransaction([

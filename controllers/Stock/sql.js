@@ -93,6 +93,73 @@ module.exports = {
         `;
     },
 
+    // Sample / gift handed over in a visit: stamped with who gave it, when and where (no doctor action).
+    GIVE_ENTRY: () => {
+        return `
+            INSERT INTO dbo.EngagementStock (
+                EntryId, UserId, ItemType, ItemId, EntryType, Quantity, DoctorId, VisitId,
+                BatchNumber, Remarks, EntryDate, CreatedBy, CreatedOn,
+                GivenByUserId, GivenByName, GivenByRole, GivenAt, GivenLatitude, GivenLongitude
+            )
+            SELECT
+                @EntryId, @UserId, @ItemType, @ItemId, 'DISTRIBUTION', -@Quantity, @DoctorId, @VisitId,
+                NULL, @Remarks, @EntryDate, @CreatedBy, @CreatedOn,
+                @GivenByUserId, @GivenByName, @GivenByRole, @GivenAt, @GivenLatitude, @GivenLongitude
+            WHERE (
+                SELECT ISNULL(SUM(Quantity), 0)
+                FROM dbo.EngagementStock WITH (UPDLOCK, HOLDLOCK)
+                WHERE UserId = @UserId AND ItemType = @ItemType AND ItemId = @ItemId
+            ) >= @Quantity;
+
+            IF @@ROWCOUNT = 0
+                THROW 50021, 'Not enough stock for one of the items.', 1;
+        `;
+    },
+
+    // Per item: issued, given, returned, expected in hand, and the last physical count.
+    RECONCILIATION: () => {
+        return `
+            SELECT
+                s.ItemType, s.ItemId, ${ITEM_NAME} AS ItemName,
+                SUM(CASE WHEN s.EntryType = 'ISSUE' THEN s.Quantity ELSE 0 END) AS Issued,
+                -SUM(CASE WHEN s.EntryType = 'DISTRIBUTION' THEN s.Quantity ELSE 0 END) AS Given,
+                -SUM(CASE WHEN s.EntryType = 'RETURN' THEN s.Quantity ELSE 0 END) AS Returned,
+                SUM(s.Quantity) AS Expected,
+                lc.CountedQty AS LastCounted, lc.ExpectedQty AS LastCountExpected, lc.CountedOn AS LastCountedOn,
+                ${displayName('cb')} AS LastCountedBy
+            FROM dbo.EngagementStock s
+            ${ITEM_JOINS}
+            OUTER APPLY (SELECT TOP 1 c.CountedQty, c.ExpectedQty, c.CountedOn, c.CountedBy FROM dbo.StockCounts c
+                         WHERE c.UserId = s.UserId AND c.ItemType = s.ItemType AND c.ItemId = s.ItemId ORDER BY c.CountedOn DESC) lc
+            LEFT JOIN Users cb ON cb.UserId = lc.CountedBy
+            WHERE s.UserId = @UserId
+            GROUP BY s.ItemType, s.ItemId, p.ProductName, g.GiftName, lc.CountedQty, lc.ExpectedQty, lc.CountedOn, cb.FirstName, cb.LastName, cb.UserName
+            ORDER BY ItemName
+        `;
+    },
+
+    ITEM_BALANCE: () => `SELECT ISNULL(SUM(Quantity), 0) AS Balance FROM dbo.EngagementStock WHERE UserId = @UserId AND ItemType = @ItemType AND ItemId = @ItemId`,
+
+    INSERT_COUNT: () => {
+        return `
+            INSERT INTO dbo.StockCounts (CountId, UserId, ItemType, ItemId, ExpectedQty, CountedQty, CountedBy, CountedOn, Remarks)
+            VALUES (@CountId, @UserId, @ItemType, @ItemId, @ExpectedQty, @CountedQty, @CountedBy, @CountedOn, @Remarks)
+        `;
+    },
+
+    COUNT_HISTORY: () => {
+        return `
+            SELECT TOP 200 c.CountId, c.ItemType, c.ItemId, CASE c.ItemType WHEN 'SAMPLE' THEN p.ProductName ELSE g.GiftName END AS ItemName,
+                   c.ExpectedQty, c.CountedQty, c.CountedQty - c.ExpectedQty AS Difference, c.CountedOn, ${displayName('cb')} AS CountedByName, c.Remarks
+            FROM dbo.StockCounts c
+            LEFT JOIN dbo.Products p ON c.ItemType = 'SAMPLE' AND p.ProductId = c.ItemId
+            LEFT JOIN dbo.Gifts g ON c.ItemType = 'GIFT' AND g.GiftId = c.ItemId
+            LEFT JOIN Users cb ON cb.UserId = c.CountedBy
+            WHERE c.UserId = @UserId
+            ORDER BY c.CountedOn DESC
+        `;
+    },
+
     // Removes stock only if the holder has enough; the check and insert are one statement.
     REMOVE_ENTRY: () => {
         return `

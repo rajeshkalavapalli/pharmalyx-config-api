@@ -38,7 +38,17 @@ const VISIT_SELECT = `
         v.DistanceFromClinicM,
         v.GeofenceStatus,
         v.GeofenceReason,
-        v.IsMockLocation
+        v.IsMockLocation,
+        v.CheckInAt,
+        v.CheckOutAt,
+        v.DwellSeconds,
+        v.MotionActivity,
+        v.InsideBoundary,
+        v.Validity,
+        v.InvalidReasons,
+        v.ValidityOverride,
+        v.OverrideReason,
+        COALESCE(v.ValidityOverride, v.Validity) AS FinalValidity
     FROM dbo.Visits v
     INNER JOIN Users u ON u.UserId = v.UserId
     INNER JOIN dbo.Doctor doc ON doc.DoctorId = v.DoctorId
@@ -148,7 +158,7 @@ module.exports = {
     GET_PLANNED_FOR_DATE: () => {
         return `
             SELECT TOP (1)
-                d.DayType,
+                REPLACE(d.DayType, '_', '-') AS DayType,
                 d.TerritoryId,
                 d.AreaId
             FROM dbo.TourPlan tp
@@ -200,7 +210,19 @@ module.exports = {
                 DistanceFromClinicM,
                 GeofenceStatus,
                 GeofenceReason,
-                IsMockLocation
+                IsMockLocation,
+                CheckInId,
+                CheckInAt,
+                CheckOutAt,
+                CheckOutLatitude,
+                CheckOutLongitude,
+                CheckOutAccuracy,
+                DwellSeconds,
+                MotionActivity,
+                InsideBoundary,
+                HospitalId,
+                Validity,
+                InvalidReasons
             )
             VALUES (
                 @VisitId,
@@ -229,7 +251,19 @@ module.exports = {
                 @DistanceFromClinicM,
                 @GeofenceStatus,
                 @GeofenceReason,
-                @IsMockLocation
+                @IsMockLocation,
+                @CheckInId,
+                @CheckInAt,
+                @CheckOutAt,
+                @CheckOutLatitude,
+                @CheckOutLongitude,
+                @CheckOutAccuracy,
+                @DwellSeconds,
+                @MotionActivity,
+                @InsideBoundary,
+                @HospitalId,
+                @Validity,
+                @InvalidReasons
             )
         `;
     },

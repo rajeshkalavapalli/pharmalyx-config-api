@@ -1,4 +1,5 @@
 const HRDA = require('./HRDA');
+const VerifiedWork = require('../VerifiedWork/VerifiedWorkService');
 
 const { generateUUID } = require('../../utils/commonUtils');
 const { getScopeUsers, resolveScope } = require('../../utils/reportScope');
@@ -79,6 +80,14 @@ exports.checkIn = async (actingUserId, payload) => {
         if (/UQ_AttendanceLogs_Day|duplicate key/i.test(error.message)) throw fail(409, 'You have already checked in today.');
         throw error;
     }
+
+    // First activity of the day: starts the work day silently (flagged for head office only if outside the territory).
+    const location = parseLocation(payload);
+    await VerifiedWork.startDay(
+        actingUserId,
+        location.LocationStatus === 'CAPTURED' ? { lat: location.Latitude, lng: location.Longitude, accuracy: location.Accuracy, isMock: payload.IsMock === true } : null,
+        'ATTENDANCE'
+    ).catch((error) => console.error('Day start not recorded:', error.message));
 
     return { message: 'Checked in. Have a good day in the field.' };
 };

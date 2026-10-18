@@ -116,7 +116,7 @@ module.exports = {
     GET_DAYS: () => {
         return `
             SELECT d.DayId, d.DcrId, CONVERT(VARCHAR(10), d.ExpenseDate, 23) AS ExpenseDate, d.StationType, d.TravelMode, d.DistanceKm,
-                   d.DaAmount, d.TaAmount, d.ApprovedDa, d.ApprovedTa, d.Remarks
+                   d.DaAmount, d.TaAmount, d.ApprovedDa, d.ApprovedTa, d.Remarks, d.VerifiedKm, d.ValidVisits, d.DaEligible
             FROM dbo.ExpenseClaimDays d
             WHERE d.ClaimId = @ClaimId
             ORDER BY d.ExpenseDate
@@ -152,8 +152,10 @@ module.exports = {
 
     INSERT_DAY: () => {
         return `
-            INSERT INTO dbo.ExpenseClaimDays (DayId, ClaimId, DcrId, ExpenseDate, StationType, TravelMode, DistanceKm, DaAmount, TaAmount, Remarks)
-            VALUES (@DayId, @ClaimId, @DcrId, @ExpenseDate, @StationType, @TravelMode, @DistanceKm, @DaAmount, @TaAmount, @Remarks)
+            INSERT INTO dbo.ExpenseClaimDays (DayId, ClaimId, DcrId, ExpenseDate, StationType, TravelMode, DistanceKm, DaAmount, TaAmount, Remarks,
+                                              VerifiedKm, ValidVisits, DaEligible)
+            VALUES (@DayId, @ClaimId, @DcrId, @ExpenseDate, @StationType, @TravelMode, @DistanceKm, @DaAmount, @TaAmount, @Remarks,
+                    @VerifiedKm, @ValidVisits, @DaEligible)
         `;
     },
 

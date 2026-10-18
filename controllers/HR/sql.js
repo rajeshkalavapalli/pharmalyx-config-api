@@ -95,7 +95,7 @@ module.exports = {
             FROM Scope s
             INNER JOIN dbo.TourPlan tp ON tp.UserId = s.UserId
             INNER JOIN dbo.TourPlanDetails d ON d.TourPlanId = tp.TourPlanId
-            WHERE d.DayType = 'non-working' AND d.PlanDate BETWEEN @FromDate AND @ToDate AND ${IN_SCOPE('tp.UserId')}
+            WHERE REPLACE(d.DayType, '_', '-') = 'non-working' AND d.PlanDate BETWEEN @FromDate AND @ToDate AND ${IN_SCOPE('tp.UserId')}
         `;
     },
 
