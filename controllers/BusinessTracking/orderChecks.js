@@ -1,7 +1,8 @@
 // Automatic POB checks. They only raise flags for head office (dbo.FraudFlags); nothing is blocked
 // and the MR does nothing extra. Each flag has a SubjectKey, so running a check again never duplicates it.
 //   On booking:  POB_INFLATED (qty > N x the chemist's average), POB_FIRST_LARGE, POB_DUPLICATE_SLIP
-//   Background:  POB_NO_REORDER (large order, no reorder for N days), POB_MONTH_END_SPIKE
+//   Background:  POB_NO_REORDER (large order, no reorder for N days), POB_MONTH_END_SPIKE,
+//                POB_UNSUPPLIED (not marked Supplied N days after booking)
 
 const rules = require('./rules');
 const { loadSettings } = require('./settings');
@@ -53,6 +54,17 @@ const SQL = {
         SELECT TOP 1 o.UserId FROM dbo.Orders o INNER JOIN dbo.Pharmacy ph ON ph.PharmacyId = o.PharmacyId
         WHERE ${LIVE} AND ph.TerritoryId = @TerritoryId AND o.OrderDate BETWEEN @From AND @To
         GROUP BY o.UserId ORDER BY SUM(o.NetAmount) DESC
+    `,
+    // POBs still not supplied N days after booking.
+    UNSUPPLIED: `
+        SELECT o.OrderId, o.OrderNumber, o.UserId, CONVERT(VARCHAR(10), o.OrderDate, 23) AS OrderDate, o.NetAmount, o.Status,
+               COALESCE(ph.PharmacyName, dr.DoctorName) AS CustomerName, st.StockistName
+        FROM dbo.Orders o
+        LEFT JOIN dbo.Pharmacy ph ON ph.PharmacyId = o.PharmacyId
+        LEFT JOIN dbo.Doctor dr ON dr.DoctorId = o.DoctorId
+        LEFT JOIN dbo.Stockist st ON st.StockistId = o.StockistId
+        WHERE o.Status IN ('BOOKED', 'CONFIRMED') AND o.OrderDate <= DATEADD(DAY, -@Days, @Today)
+          AND o.OrderDate >= DATEADD(DAY, -365, @Today)
     `,
     INSERT_FLAG: `
         IF NOT EXISTS (SELECT 1 FROM dbo.FraudFlags WHERE SubjectKey = @SubjectKey)
@@ -181,6 +193,22 @@ exports.sweep = async (now = new Date(), deps = { query: customQuery, save }) =>
                 )
             );
     }
+
+    // Booked but not marked Supplied within N days: goes to head office, not only the manager.
+    (await deps.query(SQL.UNSUPPLIED, { Today: today, Days: settings.UNSUPPLIED_ALERT_DAYS })).forEach((row) => {
+        const days = rules.daysBetween(row.OrderDate, today);
+        flags.push(
+            flag(
+                'POB_UNSUPPLIED',
+                days >= settings.UNSUPPLIED_ALERT_DAYS * 3 ? 'HIGH' : 'MEDIUM',
+                row.UserId,
+                row.OrderId,
+                `${row.OrderNumber}: ${money(row.NetAmount)} for ${row.CustomerName || 'customer'} via ${row.StockistName || 'stockist'}, booked ${row.OrderDate}, not supplied after ${days} days.`,
+                `UNSUPPLIED|${row.OrderId}`,
+                { days, stockist: row.StockistName, status: row.Status }
+            )
+        );
+    });
 
     // Last 7 days of last month vs the rest of it, per chemist territory.
     const month = rules.addMonths(rules.monthOf(today), -1);

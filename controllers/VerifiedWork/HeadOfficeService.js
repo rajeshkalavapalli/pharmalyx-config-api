@@ -57,6 +57,17 @@ const LIMITS = {
     NEAR_EXPIRY_DAYS: [7, 365],
     FOLLOW_UP_AFTER_DAYS: [1, 30],
     INCENTIVE_HOLD_MONTHS: [0, 12],
+    // Field ledger and doctor spend
+    UNSUPPLIED_ALERT_DAYS: [1, 60],
+    STOCKIST_FILL_RATE_MIN: [10, 100],
+    MR_STOCK_LIMIT: [0, 10000000],
+    MR_STOCK_HOLD_DAYS: [1, 180],
+    CHEMIST_DUE_BLOCK_DAYS: [7, 365],
+    SPEND_RATIO_MAX_PCT: [1, 500],
+    SPEND_RATIO_MONTHS: [1, 12],
+    FOCUS_VISIT_EFFORT: [0, 10000],
+    SPEND_ON_TRACK_PCT: [10, 200],
+    SPEND_PARTLY_PCT: [0, 100],
 };
 
 exports.getSettings = async () => {
