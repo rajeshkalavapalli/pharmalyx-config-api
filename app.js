@@ -82,11 +82,16 @@ const DoctorVerification = require('./controllers/DoctorVerification');
 const VerifiedWork = require('./controllers/VerifiedWork');
 const BusinessTracking = require('./controllers/BusinessTracking');
 const OrderChecks = require('./controllers/BusinessTracking/orderChecks');
+const FieldLedger = require('./controllers/FieldLedger');
+const FieldLedgerChecks = require('./controllers/FieldLedger/checks');
+const DoctorSpend = require('./controllers/DoctorSpend');
+const DataImport = require('./controllers/DataImport');
 
 const { poolPromise } = require('./db');
 const { authenticate } = require('./utils/auth');
 
-app.use(express.json());
+// 2 MB: data-import checks can carry a decision for every row.
+app.use(express.json({ limit: '2mb' }));
 app.use(cors());
 
 // Every /app route requires a verified session except POST /app/login.
@@ -133,6 +138,9 @@ app.use('/app', DoctorRequests)
 app.use('/app', DoctorVerification)
 app.use('/app', VerifiedWork)
 app.use('/app', BusinessTracking)
+app.use('/app', FieldLedger)
+app.use('/app', DoctorSpend)
+app.use('/app', DataImport)
 
 
 
@@ -141,4 +149,6 @@ app.listen(5000, ()=>{
     console.log("Pharmalyx Config API running on port 5000")
     // Background order checks (no reorder, month-end spike): flags for head office only.
     OrderChecks.startScheduler();
+    // Stock held too long by MRs, and automatic handover on an MR's leaving date.
+    FieldLedgerChecks.startScheduler();
 })

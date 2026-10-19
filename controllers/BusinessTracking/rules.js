@@ -12,6 +12,7 @@ const DEFAULTS = {
     NEAR_EXPIRY_DAYS: 90,
     FOLLOW_UP_AFTER_DAYS: 3,
     INCENTIVE_HOLD_MONTHS: 3,
+    UNSUPPLIED_ALERT_DAYS: 4,
 };
 
 const MIN_HISTORY_ORDERS = 2; // need this many earlier orders before "x times the average" means anything

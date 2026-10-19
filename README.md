@@ -261,3 +261,12 @@
 # V 1.0.61
 
 - Dashboard modules: each chart now carries a chart type (line, donut, rank, bar) and each headline number a 6-month sparkline and % change vs last month
+
+
+# V 1.0.62
+
+- Field ledger module (controllers/FieldLedger, migration schema.sql): MR saleable stock ledger with stock limit and holding-age flags, direct supply to chemists (stamped receipt photo, GPS radius, catalogue price), chemist ledger with ageing, payments (with MR until head office confirms), credit limits; new deliveries and POBs blocked when dues are over the limit or older than 60 days; schemes and special prices by head office; exit clearance with automatic handover on the leaving date; reports: stockist fill rate, spend vs business, focus
+- Doctor spend module (controllers/DoctorSpend, migration schema.sql): allowed activity types, MR request, manager recommendation, head office approval with compliance check, disbursement with document, outcome vs territory net sales, recommendation scores, flag for doctors with an earlier failed claim, reports
+- POB_UNSUPPLIED flag to head office when a POB is not supplied within N days (default 4)
+- New rule values in Settings (unsupplied days, fill rate, MR stock limit and hold days, due block days, spend ratio, focus visit value, spend outcome thresholds)
+- Tests: npm test runs tests/*.test.js (41 tests)

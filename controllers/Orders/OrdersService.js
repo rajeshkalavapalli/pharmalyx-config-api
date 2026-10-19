@@ -2,6 +2,7 @@ const crypto = require('crypto');
 
 const OrdersDA = require('./OrdersDA');
 const OrderChecks = require('../BusinessTracking/orderChecks');
+const FieldLedger = require('../FieldLedger/LedgerService');
 const { loadSettings } = require('../BusinessTracking/settings');
 const fileStore = require('../../utils/fileStore');
 const { auditQuery, writeAudit } = require('../../utils/audit');
@@ -276,6 +277,9 @@ exports.createOrder = async (actingUserId, payload) => {
     if (customerType === 'CHEMIST') {
         pharmacy = options.pharmacies.find((item) => sameId(item.PharmacyId, customerId));
         if (orderDate !== today) throw fail(400, 'Chemist orders are booked on the day, at the chemist.');
+
+        // No new POB while the chemist's dues are over the credit limit or too old.
+        await FieldLedger.assertChemistCanOrder(customerId);
 
         if (!SLIP_ID.test(String(payload.SlipPhotoId || ''))) throw fail(400, "Take a photo of the chemist's stamped order slip.");
         const key = slipKey(actingUserId, payload.SlipPhotoId);
