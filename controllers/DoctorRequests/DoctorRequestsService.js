@@ -21,6 +21,15 @@ const MIN_COMMENT = 10;
 const WEAK_GPS_METERS = 100;
 const PHOTO_ID = /^[0-9a-f-]{36}\.(jpg|png|webp)$/i;
 
+// Why a new doctor was sent without a signboard photo (the manager sees it as a warning).
+// Live GPS is still required; the doctor stays provisional until verified.
+const NO_PHOTO_REASONS = {
+    NO_SIGNBOARD: 'No signboard at the clinic',
+    INSIDE_HOSPITAL: 'Doctor sits inside a hospital',
+    HOME_CLINIC: 'Home clinic',
+    NOT_ALLOWED: 'Photo not allowed at the clinic',
+};
+
 const DEFAULT_SETTINGS = {
     VERIFY_DAYS: 45,
     DUPLICATE_RADIUS_KM: 2,
@@ -387,9 +396,17 @@ exports.requestNewDoctor = async (actingUserId, payload) => {
     const duplicates = await findDuplicates({ ...fields, ...location }, settings);
     refuseRegistrationClash(duplicates);
 
-    const evidence = await claimPhoto(actingUserId, payload.PhotoId, doctorId, 'SIGNBOARD', location, now);
-
+    // The signboard photo is optional; without one the MR says why.
     const warnings = [];
+    let evidence = null;
+    if (payload.PhotoId) {
+        evidence = await claimPhoto(actingUserId, payload.PhotoId, doctorId, 'SIGNBOARD', location, now);
+    } else {
+        const missing = NO_PHOTO_REASONS[String(payload.NoPhotoReason || '').toUpperCase()];
+        if (!missing) throw fail(400, 'Take the clinic signboard photo, or choose why there is none.');
+        warnings.push({ reason: 'NO_SIGNBOARD_PHOTO', detail: missing });
+    }
+
     if (location.Accuracy != null && location.Accuracy > WEAK_GPS_METERS) warnings.push({ reason: 'WEAK_GPS', detail: `Location accuracy was ${Math.round(location.Accuracy)} m.` });
 
     const doctor = {
@@ -433,7 +450,7 @@ exports.requestNewDoctor = async (actingUserId, payload) => {
             audit: auditQuery({ entityType: 'DOCTOR', entityId: doctorId, action: 'REQUEST_CREATE', actorId: actingUserId, after: { ...fields, ...location } }),
         });
     } catch (error) {
-        await fileStore.remove(evidence.StorageKey);
+        if (evidence) await fileStore.remove(evidence.StorageKey);
         throw error;
     }
 

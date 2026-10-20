@@ -7,6 +7,7 @@
 const rules = require('./rules');
 const { loadSettings } = require('./settings');
 const { customQuery } = require('../../utils/dbFunctions');
+const { forEachOrganisation } = require('../../utils/orgContext');
 const { generateUUID } = require('../../utils/commonUtils');
 
 const LIVE = `o.Status <> 'CANCELLED'`;
@@ -245,7 +246,8 @@ exports.sweep = async (now = new Date(), deps = { query: customQuery, save }) =>
 
 // Runs the sweep now and then every few hours while the API is up.
 exports.startScheduler = (hours = 6) => {
-    const tick = () => exports.sweep().catch((error) => console.error('Order checks sweep failed:', error.message));
+    // Once per company: each sweep sees only that company's orders.
+    const tick = () => forEachOrganisation(customQuery, () => exports.sweep(), 'Order checks').catch((error) => console.error('Order checks sweep failed:', error.message));
     setTimeout(tick, 60 * 1000);
     return setInterval(tick, hours * 3600 * 1000);
 };

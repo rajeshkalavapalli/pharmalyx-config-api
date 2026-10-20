@@ -7,6 +7,7 @@ const { ENTITIES, ENTITY_TYPES, isMatchable } = require('./entities');
 const { parseFile } = require('./parseFile');
 const { detectKind } = require('./detectKind');
 const { parseMonth } = require('./statement');
+const { LOCK_SEATS_SQL, CHECK_SEATS_SQL, seatError } = require('../../utils/seats');
 const { suggestColumnMap, cleanColumnMap, missingRequired } = require('./columnMatch');
 const { checkRows, lookupKey } = require('./validate');
 const W = require('./writers');
@@ -489,6 +490,7 @@ exports.commit = async (actorId, batchId) => {
 
     const outcome = await DA.inTransaction(async (run) => {
         await run(sql.CLAIM_BATCH(), { BatchId: batchId, ActorId: actorId, Now: now, Summary: json(summary) });
+        if (batch.EntityType === 'USER') await run(LOCK_SEATS_SQL);
 
         for (const type of W.MASTER_ORDER) {
             for (const part of chunks(masterRecords[type])) await run(W.MASTERS[type].insert, { Rows: json(part), Now: now });
@@ -567,6 +569,9 @@ exports.commit = async (actorId, batchId) => {
         });
         for (const part of chunks(resultRows)) await run(sql.SAVE_RESULTS(), { BatchId: batchId, Rows: json(part) });
 
+        // The company's user limit, counted after the new and re-activated users are in.
+        if (batch.EntityType === 'USER') await run(CHECK_SEATS_SQL);
+
         const result = {
             created: toCreate.length,
             updated: toUpdate.length,
@@ -583,6 +588,8 @@ exports.commit = async (actorId, batchId) => {
             Summary: json({ ...summary, ...result, createdMasters, statementId }),
         });
         return result;
+    }).catch((error) => {
+        throw seatError(error) || error; // over the company's user limit: a clear message
     });
 
     await writeAudit({ entityType: 'IMPORT_BATCH', entityId: batchId, action: 'IMPORT', actorId, after: { type: batch.EntityType, file: batch.FileName, ...outcome } });

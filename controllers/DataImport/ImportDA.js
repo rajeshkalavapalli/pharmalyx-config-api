@@ -1,5 +1,6 @@
 const db = require('../../db');
 const { customQuery } = require('../../utils/dbFunctions');
+const { CONTEXT_SQL, contextInputs } = require('../../utils/orgContext');
 const { buildContext } = require('./context');
 const sql = require('./sql');
 
@@ -65,6 +66,11 @@ const inTransaction = async (work) => {
     const transaction = pool.transaction();
     await transaction.begin();
     try {
+        // Name the company for the database policy once; the transaction keeps one connection.
+        const context = new db.sql.Request(transaction);
+        Object.entries(contextInputs()).forEach(([name, value]) => context.input(name, value));
+        await context.query(CONTEXT_SQL);
+
         const run = async (sqlText, inputs = {}) => {
             const request = new db.sql.Request(transaction);
             Object.entries(inputs).forEach(([name, value]) => request.input(name, value));

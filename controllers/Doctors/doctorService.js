@@ -70,10 +70,25 @@ const engagementFields = (data) => ({
     AnniversaryDate: toDate(data.AnniversaryDate ?? data.anniversaryDate, 'Anniversary'),
 });
 
+// Optional MR to assign a new doctor to: an active person in this company.
+const ASSIGNEE = `SELECT TOP 1 UserId, COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(FirstName, ' ', LastName))), ''), UserName) AS Name
+                  FROM Users WHERE UserId = TRY_CONVERT(UNIQUEIDENTIFIER, @UserId) AND ISNULL(IsActive, 1) = 1`;
+
+const ASSIGN_DOCTOR = `
+    INSERT INTO dbo.UserDoctorMapping (UserDoctorMappingId, UserId, DoctorId, IsActive, CreatedOn, ModifiedOn)
+    VALUES (@MappingId, @UserId, @DoctorId, 'Yes', @Now, @Now)`;
+
 exports.createDoctor = async (reqData, actingUserId) => {
     try {
         const doctorId = generateUUID();
         const now = new Date();
+
+        // Checked before the doctor is created, so a wrong choice creates nothing.
+        let assignee = null;
+        if (reqData.assignTo) {
+            [assignee] = await customQuery(ASSIGNEE, { UserId: String(reqData.assignTo) });
+            if (!assignee) throw fail(400, 'The person to assign this doctor to was not found or is not active.');
+        }
 
         const newDoctor = {
             DoctorId: doctorId,
@@ -97,9 +112,14 @@ exports.createDoctor = async (reqData, actingUserId) => {
         await syncNormalizedName(doctorId, newDoctor.DoctorName);
         await writeAudit({ entityType: 'DOCTOR', entityId: doctorId, action: 'CREATE', actorId: actingUserId, after: newDoctor });
 
+        if (assignee) {
+            await customQuery(ASSIGN_DOCTOR, { MappingId: generateUUID(), UserId: assignee.UserId, DoctorId: doctorId, Now: now });
+            await writeAudit({ entityType: 'DOCTOR', entityId: doctorId, action: 'ASSIGN', actorId: actingUserId, after: { UserId: assignee.UserId } });
+        }
+
         return {
             success: true,
-            message: "Doctor created successfully",
+            message: assignee ? `Doctor created and assigned to ${assignee.Name}.` : "Doctor created successfully",
             DoctorId: doctorId,
         };
     } catch (err) {

@@ -6,7 +6,9 @@ const Business = require('./BusinessHandler');
 const { requirePermission } = require('../../utils/permissions');
 
 const canView = requirePermission('business.view'); // MR, manager, head office (scope checked in the service)
-const canEdit = requirePermission('business.edit'); // head office data entry
+// Head office data entry (dispatch, returns, salaries, milestones). business.approve, not business.edit:
+// field roles hold business.edit, and must never record dispatches or salaries.
+const canEdit = requirePermission('business.approve');
 const canDecide = requirePermission('business.approve'); // head office: run checks
 
 // Read-only views.
