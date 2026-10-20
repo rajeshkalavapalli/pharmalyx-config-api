@@ -6,6 +6,7 @@ const LeaveService = require('../HR/LeaveService');
 const HRDA = require('../HR/HRDA');
 const DoctorRequestsDA = require('../DoctorRequests/DoctorRequestsDA');
 const DoctorVerificationDA = require('../DoctorVerification/DoctorVerificationDA');
+const StpService = require('../VerifiedWork/StpService');
 const OrdersDA = require('../Orders/OrdersDA');
 const { loadSettings: loadBusinessSettings } = require('../BusinessTracking/settings');
 
@@ -111,10 +112,24 @@ const TYPES = {
         label: 'Doctor verification',
         load: (UserId, isAdmin) => DoctorVerificationDA.pendingForApprover({ UserId, IsAdmin: isAdmin ? 1 : 0 }).catch(() => []),
         permission: 'doctorrequests.approve',
-        link: '/field-operation/doctor-requests',
+        link: '/field-operation/doctor-requests?tab=verification&view=proofs',
         describe: (row) => ({
             period: `Verify Dr. ${row.DoctorName}`,
             summary: [{ REGISTRATION_NO: 'Registration no.', PHONE: 'Phone', DOCUMENT: 'Photo' }[row.Method], row.Value, row.Speciality, row.AreaName].filter(Boolean).join(' · '),
+        }),
+    },
+    // Standard tour plans sent to head office; Review opens that person's plan.
+    STP: {
+        label: 'Standard tour plan',
+        load: async (UserId) =>
+            (await StpService.listSubmitted()).plans
+                .filter((plan) => String(plan.UserId).toLowerCase() !== String(UserId).toLowerCase()) // nobody approves their own
+                .map((plan) => ({ ...plan, Id: plan.StpId })),
+        permission: 'stp.approve',
+        link: (row) => `/field-operation/stp?user=${row.UserId}`,
+        describe: (row) => ({
+            period: `${row.CycleWeeks}-week cycle`,
+            summary: [`${row.Patches} patch(es)`, row.SubmittedByName && row.SubmittedByName !== row.UserName ? `sent by ${row.SubmittedByName}` : null, row.ManagerName ? `manager ${row.ManagerName}` : null].filter(Boolean).join(' · '),
         }),
     },
     STATEMENT: {
@@ -178,7 +193,7 @@ exports.getInbox = async (actingUserId) => {
                     overdue: age != null && age > OVERDUE_DAYS,
                     inline: Boolean(type.inline),
                     returnLabel: type.returnLabel || 'Return',
-                    link: type.link,
+                    link: typeof type.link === 'function' ? type.link(row) : type.link,
                     ...type.describe(row),
                 };
             })

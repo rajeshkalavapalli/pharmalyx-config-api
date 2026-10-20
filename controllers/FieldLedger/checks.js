@@ -9,6 +9,7 @@ const { loadSettings } = require('./settings');
 const HeadOffice = require('./HeadOfficeService');
 
 const { customQuery } = require('../../utils/dbFunctions');
+const { forEachOrganisation } = require('../../utils/orgContext');
 const { generateUUID } = require('../../utils/commonUtils');
 
 const INSERT_FLAG = `
@@ -71,7 +72,8 @@ exports.sweep = async (now = new Date(), deps = { query: customQuery, handover: 
 };
 
 exports.startScheduler = (hours = 6) => {
-    const tick = () => exports.sweep().catch((error) => console.error('Field ledger checks failed:', error.message));
+    // Once per company: each sweep sees only that company's stock and clearances.
+    const tick = () => forEachOrganisation(customQuery, () => exports.sweep(), 'Field ledger checks').catch((error) => console.error('Field ledger checks failed:', error.message));
     setTimeout(tick, 90 * 1000);
     return setInterval(tick, hours * 3600 * 1000);
 };

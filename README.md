@@ -270,3 +270,8 @@
 - POB_UNSUPPLIED flag to head office when a POB is not supplied within N days (default 4)
 - New rule values in Settings (unsupplied days, fill rate, MR stock limit and hold days, due block days, spend ratio, focus visit value, spend outcome thresholds)
 - Tests: npm test runs tests/*.test.js (41 tests)
+
+
+# V 1.0.63
+
+- updated one to many organisations

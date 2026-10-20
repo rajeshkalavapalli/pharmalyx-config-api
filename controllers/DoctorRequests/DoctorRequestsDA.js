@@ -43,11 +43,11 @@ exports.getRequest = (RequestId) => first(customQuery(sql.GET_REQUEST(), { Reque
 exports.listRequests = q('LIST_REQUESTS');
 exports.pendingForApprover = q('PENDING_FOR_APPROVER');
 
-// New doctor + its request + signboard photo + duplicate flags + audit, all or nothing.
+// New doctor + its request + signboard photo (if taken) + duplicate flags + audit, all or nothing.
 exports.createDoctorRequest = ({ doctor, evidence, request, flags, audit }) =>
     runInTransaction([
         { sqlQuery: sql.CREATE_FIELD_DOCTOR(), inputs: doctor },
-        { sqlQuery: sql.INSERT_EVIDENCE(), inputs: evidence },
+        ...(evidence ? [{ sqlQuery: sql.INSERT_EVIDENCE(), inputs: evidence }] : []),
         { sqlQuery: sql.INSERT_REQUEST(), inputs: request },
         ...flags.map((inputs) => ({ sqlQuery: sql.INSERT_FLAG(), inputs })),
         audit,
