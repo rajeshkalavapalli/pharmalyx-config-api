@@ -67,7 +67,7 @@ const stat = (label, value, caption, color, icon, progress) => ({ label, value, 
 const SECTIONS = {
     field: async (p) => {
         const [visits, dcr, weekday, deviations, validity] = await Promise.all([
-            rows(`SELECT ${MONTH('v.VisitDate')} AS M, COUNT(*) AS N, SUM(CASE WHEN ${VALID} = 'VALID' THEN 1 ELSE 0 END) AS V
+            rows(`SELECT ${MONTH('v.VisitDate')} AS M, COUNT(*) AS N, SUM(CASE WHEN ${VALID} IN ('VALID', 'REVIEW') THEN 1 ELSE 0 END) AS V
                   FROM dbo.Visits v INNER JOIN People pp ON pp.UserId = v.UserId WHERE v.VisitDate >= @From GROUP BY ${MONTH('v.VisitDate')}`, p),
             rows(`SELECT r.Status AS K, COUNT(*) AS N FROM dbo.DailyCallReports r INNER JOIN People pp ON pp.UserId = r.UserId
                   WHERE r.ReportDate BETWEEN @Month AND @MonthEnd GROUP BY r.Status`, p),
@@ -79,7 +79,8 @@ const SECTIONS = {
                   WHERE v.VisitDate BETWEEN @Month AND @MonthEnd GROUP BY ISNULL(${VALID}, 'UNCHECKED')`, p),
         ]);
         const month = months6(visits, (r) => r.N);
-        const valid = num(validity.find((r) => r.K === 'VALID')?.N);
+        // Counted = valid + needs a look.
+        const valid = num(validity.find((r) => r.K === 'VALID')?.N) + num(validity.find((r) => r.K === 'REVIEW')?.N);
         const total = validity.reduce((s, r) => s + num(r.N), 0);
         return {
             stats: [

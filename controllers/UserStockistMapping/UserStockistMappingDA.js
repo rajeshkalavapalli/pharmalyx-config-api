@@ -1,4 +1,4 @@
-const { customQuery } = require('../../utils/dbFunctions');
+const { customQuery, runInTransaction } = require('../../utils/dbFunctions');
 const sql = require('./Sql');
 
 exports.deleteUserStockistMappings = async (userId) => {
@@ -38,3 +38,11 @@ exports.getUserStockistMappingByUserId = async (userId) => {
 	);
 };	
 
+
+// Replaces the user's stockist list with this one, all or nothing (a failure keeps the old list).
+exports.replaceUserStockistMappings = async (userId, mappings) => {
+	return await runInTransaction([
+		{ sqlQuery: sql.DELETE_USER_STOCKIST_MAPPINGS(), inputs: { UserId: userId } },
+		...mappings.map((inputs) => ({ sqlQuery: sql.CREATE_USER_STOCKIST_MAPPING(), inputs })),
+	]);
+};

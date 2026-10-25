@@ -20,11 +20,10 @@ exports.createUserStockistMapping = async (userId, mapping) => {
 };
 
 exports.createUserStockistMappings = async (userId, mappings) => {
-	await exports.deleteUserStockistMappings(userId);
-
-	for (const mapping of mappings) {
-		await exports.createUserStockistMapping(userId, mapping);
-	}
+	await UserStockistMappingDA.replaceUserStockistMappings(
+		userId,
+		(mappings || []).filter((mapping) => mapping.stockistId).map((mapping) => ({ UserStockistMappingId: generateUUID(), UserId: userId, StockistId: mapping.stockistId }))
+	);
 
 	return {
 		success: true,

@@ -3,6 +3,7 @@ const { checkVisit } = require('./gpsChecks');
 const StockService = require('../Stock/StockService');
 const VerifiedWork = require('../VerifiedWork/VerifiedWorkService');
 const VerifiedWorkDA = require('../VerifiedWork/VerifiedWorkDA');
+const Explanations = require('../VerifiedWork/ExplanationService');
 
 // A planned call for this doctor and day becomes "visited". Missing table = no-op
 // (SQL Server defers name resolution for tables that don't exist yet).
@@ -188,7 +189,12 @@ exports.getVisits = async (actingUserId, query) => {
         DoctorId: optionalGuid(query.doctorId, 'Doctor'),
     });
 
-    return visits.map((visit) => ({ ...visit, ...VerifiedWork.describeReasons(visit.InvalidReasons) }));
+    // Each visit's explanation (if any) and whether its owner can still explain it.
+    const explained = await Explanations.forVisits(visits.map((visit) => visit.VisitId));
+    return visits.map((visit) => {
+        const explanation = explained[String(visit.VisitId).toLowerCase()] || null;
+        return { ...visit, ...VerifiedWork.describeReasons(visit.InvalidReasons), Explanation: explanation, CanExplain: Explanations.canExplain(visit, explanation, actingUserId) };
+    });
 };
 
 exports.getVisitById = async (actingUserId, visitId) => {
@@ -209,7 +215,9 @@ exports.getVisitById = async (actingUserId, visitId) => {
     // Stock tables may not exist yet on older databases.
     const items = await StockService.getVisitItems(visit.VisitId).catch(() => []);
 
-    return { ...visit, ...VerifiedWork.describeReasons(visit.InvalidReasons), Items: items };
+    const explanation = (await Explanations.forVisits([visit.VisitId]))[String(visit.VisitId).toLowerCase()] || null;
+
+    return { ...visit, ...VerifiedWork.describeReasons(visit.InvalidReasons), Items: items, Explanation: explanation, CanExplain: Explanations.canExplain(visit, explanation, actingUserId) };
 };
 
 exports.getFollowUps = async (actingUserId, userId) => {

@@ -26,8 +26,25 @@ const SCOPE_CTE = `
         WHERE t.Depth < ${MAX_DEPTH}
           AND t.Path NOT LIKE '%/' + CAST(c.UserId AS VARCHAR(36)) + '/%'
     ),
+    -- Everyone above the acting user (their manager, the manager's manager, ...).
+    Above AS (
+        SELECT m.UserId, m.ManagerId, CAST('/' + CAST(m.UserId AS VARCHAR(36)) + '/' AS VARCHAR(MAX)) AS Path, 1 AS Depth
+        FROM Users me
+        INNER JOIN Users m ON m.UserId = me.ManagerId
+        WHERE me.UserId = @ActingUserId
+        UNION ALL
+        SELECT m.UserId, m.ManagerId, a.Path + CAST(m.UserId AS VARCHAR(36)) + '/', a.Depth + 1
+        FROM Users m
+        INNER JOIN Above a ON m.UserId = a.ManagerId
+        WHERE a.Depth < ${MAX_DEPTH}
+          AND a.Path NOT LIKE '%/' + CAST(m.UserId AS VARCHAR(36)) + '/%'
+    ),
+    -- A reporting loop (A -> B -> C -> A) would put your own managers "below" you; nobody above
+    -- you is ever part of your team, so a loop can only show less, never someone else's data.
     Scope AS (
-        SELECT DISTINCT UserId FROM Tree WHERE @ViewAll = 0
+        SELECT DISTINCT t.UserId FROM Tree t
+        WHERE @ViewAll = 0
+          AND (t.UserId = @ActingUserId OR t.UserId NOT IN (SELECT a.UserId FROM Above a))
         UNION
         SELECT UserId FROM Users WHERE @ViewAll = 1
     )

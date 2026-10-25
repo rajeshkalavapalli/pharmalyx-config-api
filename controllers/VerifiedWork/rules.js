@@ -19,17 +19,28 @@ const DEFAULTS = {
     TIMING_MIN_SHARE: 0.6,
     UNPINNED_CLINIC_VALID: 0,
     REQUIRE_BOUNDARY: 0,
+    // Day checks (a day that looks unusual is put on hold for review, never cut automatically).
+    RAPID_VISITS_COUNT: 4, // this many visits checked in ...
+    RAPID_WINDOW_MINUTES: 5, // ... within this many minutes (unless all in one hospital)
+    ONE_SPOT_VISITS: 5, // this many visits to doctors of different areas ...
+    ONE_SPOT_METERS: 100, // ... reported from within this distance of each other
+    NO_TRAVEL_KM: 5, // an Ex-HQ / Outstation day with less travel than this
 };
 
 const IST_OFFSET_MINUTES = 330;
 
-// Reasons a visit is not counted (shown to the MR, manager and head office).
+// Why a visit is not plain "counted" (shown to the MR, manager and head office).
+// HARD reasons: clear evidence it was not a real visit -> NOT COUNTED (INVALID).
+// Anything else (a short stop, weak or drifting GPS, moving phone, clinic not pinned) -> NEEDS A LOOK
+// (REVIEW): it still counts for DA and coverage unless the manager or head office rejects it,
+// and the employee can explain it. One honest miss never costs an employee money.
 const REASONS = {
     NO_CHECKIN: 'Logged without a live check-in at the clinic (typed in later)',
     NO_GPS: 'No GPS location at check-in or check-out',
     MOCK_GPS: 'The phone reported a fake (mock) GPS location',
     IN_VEHICLE: 'The phone was moving in a vehicle',
     SHORT_STOP: 'Stayed at the clinic for less than the minimum time',
+    NO_REAL_STOP: 'Under a minute at the clinic (a quick call)',
     AWAY_FROM_CLINIC: 'Check-in or check-out was not within the clinic radius',
     CLINIC_NOT_PINNED: "The doctor's clinic location is not pinned yet, so presence can't be checked",
     OUTSIDE_TERRITORY: 'Outside the approved territory boundary',
@@ -37,6 +48,18 @@ const REASONS = {
     OVERLAP: 'Overlaps another visit at the same time',
     ON_LEAVE: 'Logged on a day of approved leave',
 };
+
+const HARD_REASONS = new Set(['NO_CHECKIN', 'NO_GPS', 'MOCK_GPS', 'OUTSIDE_TERRITORY', 'OVERLAP', 'ON_LEAVE']);
+
+// Under this many seconds a visit is a quick call (needs a look, still counts); many quick calls
+// close together are caught by the day checks (dayChecks.js), which put the day on hold for review.
+const NO_REAL_STOP_SECONDS = 60;
+
+// VALID (counted), REVIEW (needs a look, counted) or INVALID (not counted).
+const validityFor = (reasons) => (!reasons.length ? 'VALID' : reasons.some((r) => HARD_REASONS.has(r)) ? 'INVALID' : 'REVIEW');
+
+// Results that count towards DA, coverage and targets.
+const COUNTED = ['VALID', 'REVIEW'];
 
 // ---------------------------------------------------------------------
 // Time helpers (IST)
@@ -174,7 +197,9 @@ const judgeVisit = ({ checkIn, checkOut, clinic, territory, motion = [], overlap
     }
     if (moving) reasons.push('IN_VEHICLE');
 
-    if (dwellSeconds < settings.MIN_DWELL_MINUTES * 60) reasons.push('SHORT_STOP');
+    // Doctors often give only a minute ("brand and MRP, then go"): a quick call still counts.
+    if (dwellSeconds < NO_REAL_STOP_SECONDS) reasons.push('NO_REAL_STOP');
+    else if (dwellSeconds < settings.MIN_DWELL_MINUTES * 60) reasons.push('SHORT_STOP');
 
     // Presence at the clinic: both fixes inside the radius (GPS accuracy up to 100 m is allowed for).
     if (clinic && clinic.lat != null && clinic.lng != null) {
@@ -206,7 +231,7 @@ const judgeVisit = ({ checkIn, checkOut, clinic, territory, motion = [], overlap
     if (overlaps) reasons.push('OVERLAP');
     if (onLeave) reasons.push('ON_LEAVE');
 
-    return { validity: reasons.length ? 'INVALID' : 'VALID', reasons, notes, dwellSeconds, insideBoundary };
+    return { validity: validityFor(reasons), reasons, notes, dwellSeconds, insideBoundary };
 };
 
 // Intervals [start, end] overlap (touching ends do not count).
@@ -361,6 +386,10 @@ module.exports = {
     parsePolygon,
     insideAny,
     judgeVisit,
+    validityFor,
+    HARD_REASONS,
+    NO_REAL_STOP_SECONDS,
+    COUNTED,
     overlapsAny,
     travelledKm,
     slotOf,

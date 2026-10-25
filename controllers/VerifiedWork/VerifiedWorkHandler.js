@@ -1,6 +1,7 @@
 const Work = require('./VerifiedWorkService');
 const HeadOffice = require('./HeadOfficeService');
 const Stp = require('./StpService');
+const Explanations = require('./ExplanationService');
 const VisitsDA = require('../Visits/VisitsDA');
 const { handle, actingUser } = require('../../utils/http');
 
@@ -44,3 +45,9 @@ exports.createHospital = handle('add the hospital', (req) => HeadOffice.saveHosp
 exports.updateHospital = handle('save the hospital', (req) => HeadOffice.saveHospital(actingUser(req), req.params.hospitalId, req.body || {}));
 exports.hospitalDoctors = handle('load hospital doctors', (req) => HeadOffice.hospitalDoctors(req.params.hospitalId, req.query));
 exports.setHospitalDoctors = handle('update hospital doctors', (req) => HeadOffice.setHospitalDoctors(actingUser(req), req.params.hospitalId, req.body || {}));
+
+// Visit explanations: employee explains; manager / head office decides.
+exports.explainVisit = handle('send the explanation', (req) => Explanations.explain(actingUser(req), req.params.visitId, req.body || {}), 201);
+exports.listExplanations = handle('load the explanations', async (req) => ({ explanations: await Explanations.listPending(actingUser(req)) }));
+exports.acceptExplanation = handle('accept the explanation', (req) => Explanations.decide(actingUser(req), req.params.visitId, true, req.body || {}));
+exports.rejectExplanation = handle('reject the explanation', (req) => Explanations.decide(actingUser(req), req.params.visitId, false, req.body || {}));

@@ -84,10 +84,12 @@ const BusinessTracking = require('./controllers/BusinessTracking');
 const OrderChecks = require('./controllers/BusinessTracking/orderChecks');
 const FieldLedger = require('./controllers/FieldLedger');
 const FieldLedgerChecks = require('./controllers/FieldLedger/checks');
+const DayReviews = require('./controllers/Expenses/DayReviewService');
 const DoctorSpend = require('./controllers/DoctorSpend');
 const DataImport = require('./controllers/DataImport');
 
-const { poolPromise } = require('./db');
+// Database: db.js connects at start-up and retries on its own until SQL Server answers.
+require('./db');
 const { authenticate } = require('./utils/auth');
 
 // 2 MB: data-import checks can carry a decision for every row.
@@ -151,4 +153,5 @@ app.listen(5000, ()=>{
     OrderChecks.startScheduler();
     // Stock held too long by MRs, and automatic handover on an MR's leaving date.
     FieldLedgerChecks.startScheduler();
+    DayReviews.startScheduler(); // TA / DA day reviews: move days on when a step is not done in time
 })

@@ -2,6 +2,8 @@ const { SCOPE_CTE, displayName } = require('../../utils/reportScope');
 
 // A visit's final result: head office override wins over the system decision.
 const EFFECTIVE = `COALESCE(v.ValidityOverride, v.Validity)`;
+// Counted visits: valid, or needs a look (counts unless rejected).
+const COUNTED = `${EFFECTIVE} IN ('VALID', 'REVIEW')`;
 
 module.exports = {
     EFFECTIVE,
@@ -395,10 +397,10 @@ module.exports = {
     VISIT_COUNTS: () => {
         return `
             SELECT v.DoctorId,
-                   SUM(CASE WHEN ${EFFECTIVE} = 'VALID' THEN 1 ELSE 0 END) AS ValidVisits,
+                   SUM(CASE WHEN ${COUNTED} THEN 1 ELSE 0 END) AS ValidVisits,
                    SUM(CASE WHEN ${EFFECTIVE} = 'INVALID' THEN 1 ELSE 0 END) AS NotCounted,
                    SUM(CASE WHEN ${EFFECTIVE} IS NULL THEN 1 ELSE 0 END) AS Unchecked,
-                   MAX(CASE WHEN ${EFFECTIVE} = 'VALID' THEN CONVERT(VARCHAR(10), v.VisitDate, 23) END) AS LastValid
+                   MAX(CASE WHEN ${COUNTED} THEN CONVERT(VARCHAR(10), v.VisitDate, 23) END) AS LastValid
             FROM dbo.Visits v
             WHERE v.UserId = @UserId AND v.VisitDate BETWEEN @From AND @To
             GROUP BY v.DoctorId
@@ -410,7 +412,7 @@ module.exports = {
         return `
             SELECT v.DoctorId, v.CheckInAt
             FROM dbo.Visits v
-            WHERE v.UserId = @UserId AND v.CheckInAt IS NOT NULL AND ${EFFECTIVE} = 'VALID' AND v.VisitDate >= @Since
+            WHERE v.UserId = @UserId AND v.CheckInAt IS NOT NULL AND ${COUNTED} AND v.VisitDate >= @Since
         `;
     },
 

@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 
 const Work = require('./VerifiedWorkHandler');
-const { requirePermission } = require('../../utils/permissions');
+const { requireAnyPermission, requirePermission } = require('../../utils/permissions');
 
 const canView = requirePermission('verifiedwork.view'); // managers: view only
 const canEdit = requirePermission('verifiedwork.edit'); // head office: rules, boundaries, hospitals
@@ -34,6 +34,13 @@ router.post('/stp/:stpId/return', requirePermission('stp.approve'), Work.returnS
 // Valid / not counted visits: managers view, head office overrides (with a reason, audited).
 router.get('/work/visits', canView, Work.listVisits);
 router.post('/work/visits/:visitId/override', canDecide, Work.overrideVisit);
+
+// Explanations: the employee explains a visit that needs a look / is not counted; manager or head office decides.
+const canReview = requireAnyPermission('dcr.approve', 'tourplan.approve', 'verifiedwork.approve');
+router.post('/work/visits/:visitId/explain', requirePermission('visits.create'), Work.explainVisit);
+router.get('/work/explanations', canReview, Work.listExplanations);
+router.post('/work/visits/:visitId/explanation/accept', canReview, Work.acceptExplanation);
+router.post('/work/visits/:visitId/explanation/reject', canReview, Work.rejectExplanation);
 router.get('/work/flags', canView, Work.listFlags);
 router.post('/work/flags/:flagId', canDecide, Work.actOnFlag);
 

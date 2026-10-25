@@ -363,8 +363,9 @@ test('records: doctors are created approved but provisional, tagged as imported'
     assert.equal(record.ApprovalStatus, 'APPROVED');
     assert.equal(record.VerificationStatus, 'PROVISIONAL');
     assert.equal(record.Source, 'IMPORT');
-    assert.equal(record.TerritoryId, ID.ongole);
-    assert.equal(record.StateId, ID.ap);
+    // Doctor location ids are text, written in upper case like the rest of the app.
+    assert.equal(record.TerritoryId, ID.ongole.toUpperCase());
+    assert.equal(record.StateId, ID.ap.toUpperCase());
     assert.equal(record.NormalizedName, 'rao suresh');
 });
 

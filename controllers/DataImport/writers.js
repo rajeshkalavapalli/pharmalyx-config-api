@@ -12,6 +12,8 @@ const idOf = (item) => item?.id ?? null;
 const stateOf = (v) => v.territory?.stateId ?? null;
 const countryOf = (v) => v.territory?.countryId ?? null;
 const text = (value) => (value === undefined || value === '' ? null : value);
+// Doctor location columns are VARCHAR: write ids in upper case, as the doctor screens and SQL Server do.
+const idText = (id) => (id ? String(id).toUpperCase() : null);
 
 const outletColumns = (nameColumn) => [
     [nameColumn, 'NVARCHAR(100)', (v) => v.name],
@@ -136,10 +138,10 @@ const WRITERS = {
             ['DateOfBirth', 'DATE', (v) => v.dateOfBirth ?? null],
             ['AnniversaryDate', 'DATE', (v) => v.anniversary ?? null],
             // Older columns stored as text.
-            ['CountryId', 'VARCHAR(50)', (v) => countryOf(v) && String(countryOf(v))],
-            ['StateId', 'VARCHAR(50)', (v) => stateOf(v) && String(stateOf(v))],
-            ['TerritoryId', 'VARCHAR(50)', (v) => idOf(v.territory) && String(idOf(v.territory))],
-            ['AreaId', 'VARCHAR(50)', (v) => idOf(v.area) && String(idOf(v.area))],
+            ['CountryId', 'VARCHAR(50)', (v) => idText(countryOf(v))],
+            ['StateId', 'VARCHAR(50)', (v) => idText(stateOf(v))],
+            ['TerritoryId', 'VARCHAR(50)', (v) => idText(idOf(v.territory))],
+            ['AreaId', 'VARCHAR(50)', (v) => idText(idOf(v.area))],
             ['IsActive', 'VARCHAR(3)', (v) => yesNo(v.active)],
             // New doctors only: approved master data, still to be verified in the field.
             ['ApprovalStatus', 'VARCHAR(10)', (v, x) => (x.creating ? 'APPROVED' : null)],

@@ -43,12 +43,15 @@ exports.addItem = (ClaimId, UserId, item, Now) =>
 exports.deleteItem = (ClaimId, UserId, ItemId, Now) =>
     runInTransaction([lock(ClaimId, UserId), { sqlQuery: sql.DELETE_ITEM(), inputs: { ItemId, ClaimId } }, recalc(ClaimId, Now)]);
 
-// Final day sync + status change in one go.
-exports.submit = (ClaimId, UserId, days, ToStatus, Now) =>
+exports.insertItemQuery = (item) => ({ sqlQuery: sql.INSERT_ITEM(), inputs: item });
+
+// Final day sync + status change in one go. `extra`: more steps (released lines) in the same transaction.
+exports.submit = (ClaimId, UserId, days, ToStatus, Now, extra = []) =>
     runInTransaction([
         lock(ClaimId, UserId),
         { sqlQuery: sql.DELETE_DAYS(), inputs: { ClaimId } },
         ...days.map((day) => ({ sqlQuery: sql.INSERT_DAY(), inputs: day })),
+        ...extra,
         recalc(ClaimId, Now),
         { sqlQuery: sql.SUBMIT(), inputs: { ClaimId, ToStatus, Now } },
     ]);

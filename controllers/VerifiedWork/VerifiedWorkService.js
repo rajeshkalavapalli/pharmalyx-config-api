@@ -1,5 +1,7 @@
 const DA = require('./VerifiedWorkDA');
+const HRDA = require('../HR/HRDA');
 const rules = require('./rules');
+const { distanceMeters } = require('../../utils/doctorMatching');
 const { loadSettings, allowedTerritory, exceptionFor } = require('./territory');
 
 const { generateUUID } = require('../../utils/commonUtils');
@@ -142,7 +144,32 @@ const startDay = async (userId, fix, source, now = new Date()) => {
         flag
     );
 
+    // One check-in: starting the day (My Day, first visit) also records attendance, so nobody checks in twice.
+    if (inserted && source !== 'ATTENDANCE') await recordAttendance(userId, workDate, fix, source, now);
+
     return { started: inserted, workDay: await DA.getWorkDay(userId, workDate), flagged: inserted && outside };
+};
+
+const ATTENDANCE_NOTE = { PLAN_OPEN: 'Checked in when the day was started in My Day.', CHECK_IN: 'Checked in at the first visit.' };
+
+// Attendance check-in for the day, unless one exists. Never fails the day start.
+const recordAttendance = async (userId, workDate, fix, source, now) => {
+    try {
+        if (await HRDA.getDayLog({ UserId: userId, Day: workDate })) return;
+        await HRDA.checkIn({
+            AttendanceId: generateUUID(),
+            UserId: userId,
+            Day: workDate,
+            Now: now,
+            Remarks: ATTENDANCE_NOTE[source] || 'Checked in when the work day started.',
+            LocationStatus: fix ? 'CAPTURED' : 'UNAVAILABLE',
+            Latitude: fix?.lat ?? null,
+            Longitude: fix?.lng ?? null,
+            Accuracy: fix?.accuracy ?? null,
+        });
+    } catch (error) {
+        if (!/UQ_AttendanceLogs_Day|duplicate key/i.test(error.message)) console.error('Attendance not recorded:', error.message);
+    }
 };
 
 exports.startDay = startDay;
@@ -242,8 +269,25 @@ exports.checkIn = async (actingUserId, payload, VisitsDA) => {
         Activity: fix?.activity ?? null,
     });
 
-    const settings = await loadSettings();
-    return { CheckInId: checkInId, CheckInAt: now, minDwellMinutes: settings.MIN_DWELL_MINUTES, hasGps: Boolean(fix) };
+    const [settings, hospital] = await Promise.all([loadSettings(), DA.doctorHospital(payload.DoctorId).catch(() => null)]);
+    return {
+        CheckInId: checkInId,
+        CheckInAt: now,
+        minDwellMinutes: settings.MIN_DWELL_MINUTES,
+        hasGps: Boolean(fix),
+        // Live guidance: how far the phone is from the clinic, judged like the visit itself.
+        clinic: clinicGuide(fix, hospital ? { lat: hospital.Latitude, lng: hospital.Longitude, radius: hospital.RadiusM } : { lat: doctor.ClinicLatitude, lng: doctor.ClinicLongitude }, settings),
+    };
+};
+
+// { pinned, distanceM, radiusM, inside, accuracyM } for the check-in screen (GPS accuracy up to 100 m is allowed for).
+const clinicGuide = (fix, clinic, settings) => {
+    const pinned = clinic && clinic.lat != null && clinic.lng != null;
+    const radiusM = Number(clinic?.radius) || settings.GEOFENCE_METERS;
+    if (!pinned || !fix) return { pinned: Boolean(pinned), distanceM: null, radiusM, inside: null, accuracyM: fix?.accuracy ?? null };
+    const distanceM = Math.round(distanceMeters(fix.lat, fix.lng, Number(clinic.lat), Number(clinic.lng)) || 0);
+    const allowance = Math.min(Number(fix.accuracy) || 0, 100);
+    return { pinned: true, distanceM, radiusM, inside: distanceM - allowance <= radiusM, accuracyM: fix.accuracy ?? null };
 };
 
 // Worst movement seen: vehicle > walking > still > unknown.
@@ -313,7 +357,7 @@ exports.judgeNewVisit = async ({ userId, doctor, visitDate, checkInId, location,
         flag('VISIT_OUTSIDE_TERRITORY', 'HIGH', `Visit to Dr. ${doctor.DoctorName} was checked in outside the territory boundary; it does not count.`, { lat: checkIn.lat, lng: checkIn.lng });
     }
     if (decision.reasons.includes('IN_VEHICLE')) {
-        flag('DRIVE_BY', 'MEDIUM', `Visit to Dr. ${doctor.DoctorName} was logged while moving in a vehicle; it does not count.`, { motion: motionList });
+        flag('DRIVE_BY', 'MEDIUM', `Visit to Dr. ${doctor.DoctorName} was logged while moving in a vehicle; it needs a look.`, { motion: motionList });
     }
 
     return {
@@ -351,7 +395,7 @@ exports.describeReasons = (value) => {
     const reasons = parsed?.reasons || [];
     const notes = parsed?.notes || [];
     return {
-        reasons: reasons.map((code) => ({ code, text: rules.REASONS[code] || code })),
+        reasons: reasons.map((code) => ({ code, text: rules.REASONS[code] || code, hard: rules.HARD_REASONS.has(code) })),
         notes: notes.map((code) => ({ code, text: rules.REASONS[code] || code })),
     };
 };
@@ -445,7 +489,14 @@ exports.getToday = async (actingUserId) => {
         // Anyone else due inside the territory: no approval needed to visit them.
         otherDue: rules.orderByTiming(due.filter((doctor) => !inPatch.includes(doctor))),
         visits: visits.map((visit) => ({ ...visit, ...exports.describeReasons(visit.InvalidReasons), InvalidReasons: undefined })),
-        validToday: visits.filter((visit) => visit.FinalValidity === 'VALID').length,
+        // Counted today (valid + needs a look), and how each result splits.
+        validToday: visits.filter((visit) => rules.COUNTED.includes(visit.FinalValidity)).length,
+        today: {
+            counted: visits.filter((visit) => visit.FinalValidity === 'VALID').length,
+            review: visits.filter((visit) => visit.FinalValidity === 'REVIEW').length,
+            notCounted: visits.filter((visit) => visit.FinalValidity === 'INVALID').length,
+            daNeeds: settings.DA_MIN_VALID_VISITS,
+        },
     };
 };
 
