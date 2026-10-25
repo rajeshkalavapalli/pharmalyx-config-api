@@ -296,7 +296,7 @@ exports.setHospitalDoctors = async (actingUserId, hospitalId, payload) => {
 // Visit validity: managers view, head office overrides
 // =========================================================
 
-const VALIDITY_FILTERS = ['VALID', 'INVALID', 'UNCHECKED'];
+const VALIDITY_FILTERS = ['VALID', 'REVIEW', 'INVALID', 'UNCHECKED'];
 
 exports.listVisits = async (actingUserId, query) => {
     requireActingUser(actingUserId);
@@ -316,6 +316,7 @@ exports.listVisits = async (actingUserId, query) => {
         summary: {
             total: visits.length,
             valid: visits.filter((v) => v.FinalValidity === 'VALID').length,
+            review: visits.filter((v) => v.FinalValidity === 'REVIEW').length,
             invalid: visits.filter((v) => v.FinalValidity === 'INVALID').length,
             unchecked: visits.filter((v) => !v.FinalValidity).length,
             overridden: visits.filter((v) => v.ValidityOverride).length,

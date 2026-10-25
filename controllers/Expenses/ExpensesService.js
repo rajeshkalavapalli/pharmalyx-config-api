@@ -1,5 +1,6 @@
 const ExpensesDA = require('./ExpensesDA');
 const Allowances = require('../VerifiedWork/allowances');
+const DayReviews = require('./DayReviewService');
 
 const { generateUUID } = require('../../utils/commonUtils');
 const { getPermissions } = require('../../utils/permissions');
@@ -11,6 +12,8 @@ const MAX_ITEM_AMOUNT = 100000;
 const MAX_RATE = 100000;
 
 const ITEM_TYPES = { COURIER: 'Courier', STATIONERY: 'Stationery', MEETING_TRAVEL: 'Special meeting travel', MISC: 'Miscellaneous' };
+// Lines the system adds (never typed by the MR, never counted in the other-expenses limit).
+const SYSTEM_ITEM_TYPES = { HOLD_RELEASE: 'Released after review' };
 const EDITABLE = ['DRAFT', 'RETURNED'];
 const FINANCE_STATUSES = ['MANAGER_APPROVED', 'APPROVED', 'PAID'];
 
@@ -68,13 +71,17 @@ const priceDay = (rate, stationType, travelMode, distanceKm) => {
 //   TA = km actually travelled in work hours x the company rate for the day's travel mode
 //   DA = only when the day has enough valid visits; HQ / Ex-HQ / Outstation from the STP patches visited
 // The MR may add remarks only.
-const buildDays = (facts, saved, rate, claimId, remarksByDate = new Map()) => {
+// `holds`: Map(date -> day review). A day on hold or not payable carries no amount in the claim.
+const buildDays = (facts, saved, rate, claimId, remarksByDate = new Map(), holds = new Map()) => {
     const savedByDate = new Map(saved.map((day) => [day.ExpenseDate, day]));
 
     return facts.map((fact) => {
         const previous = savedByDate.get(fact.date);
         const remarks = remarksByDate.has(fact.date) ? remarksByDate.get(fact.date) : previous?.Remarks || null;
-        const amounts = rate ? priceDay(rate, fact.station, fact.travelMode, fact.km) : { da: 0, ta: 0 };
+        const held = DayReviews.isHeld(holds.get(fact.date));
+        // DA granted by head office on a reviewed day counts as eligible.
+        const daEligible = fact.daEligible || Boolean(holds.get(fact.date)?.DaGranted);
+        const amounts = rate && !held ? priceDay(rate, fact.station, fact.travelMode, fact.km) : { da: 0, ta: 0 };
 
         return {
             DayId: generateUUID(),
@@ -84,18 +91,49 @@ const buildDays = (facts, saved, rate, claimId, remarksByDate = new Map()) => {
             StationType: fact.station,
             TravelMode: fact.travelMode,
             DistanceKm: fact.km,
-            DaAmount: fact.daEligible ? toRupees(amounts.da) : 0,
+            DaAmount: daEligible ? toRupees(amounts.da) : 0,
             TaAmount: toRupees(amounts.ta),
             Remarks: remarks,
             VerifiedKm: fact.km,
             ValidVisits: fact.validVisits,
-            DaEligible: fact.daEligible ? 1 : 0,
+            DaEligible: daEligible ? 1 : 0,
             VisitCount: fact.validVisits,
         };
     });
 };
 
 const workFacts = (userId, month) => Allowances.dayFacts(userId, month, monthEnd(month));
+
+// YYYY-MM-DD for a date that may come back from the database as a Date.
+const dateKey = (value) => (value instanceof Date ? value.toISOString().slice(0, 10) : String(value || "").slice(0, 10));
+
+// What a day would pay (rupees), held or not: used for the amount on hold.
+const priceFor = (rate) => (fact) => {
+    if (!rate) return { da: 0, ta: 0 };
+    const { da, ta } = priceDay(rate, fact.station, fact.travelMode, fact.km);
+    return { da: fact.daEligible ? toRupees(da) : 0, ta: toRupees(ta) };
+};
+
+// Day reviews for the month (puts unusual days on hold the first time they are seen).
+const holdsOf = (userId, month, facts, rate) => DayReviews.holdsFor(userId, month, monthEnd(month), facts, priceFor(rate));
+
+// Payable days from earlier months whose claim was already submitted: paid with this claim.
+const releasedLines = async (userId, month, claimId) =>
+    (await DayReviews.releasable(userId, month)).map((row) => ({
+        reviewId: row.ReviewId,
+        item: {
+            ItemId: generateUUID(),
+            ClaimId: claimId,
+            ExpenseDate: month,
+            ExpenseType: 'HOLD_RELEASE',
+            Description: `TA / DA for ${row.WorkDate}, released after review`,
+            BillNumber: null,
+            Vendor: null,
+            Amount: Math.round((Number(row.DaAmount || 0) + Number(row.TaAmount || 0)) * 100) / 100,
+            Now: new Date(),
+        },
+        workDate: row.WorkDate,
+    }));
 
 const normalizeDay = (day) => ({
     DayId: day.DayId,
@@ -115,7 +153,10 @@ const normalizeDay = (day) => ({
     DaEligible: day.DaEligible == null ? null : Boolean(day.DaEligible),
 });
 
-const normalizeItem = (item) => ({ ...item, Amount: money(item.Amount), ApprovedAmount: money(item.ApprovedAmount), TypeLabel: ITEM_TYPES[item.ExpenseType] });
+const normalizeItem = (item) => ({ ...item, Amount: money(item.Amount), ApprovedAmount: money(item.ApprovedAmount), TypeLabel: ITEM_TYPES[item.ExpenseType] || SYSTEM_ITEM_TYPES[item.ExpenseType], System: Boolean(SYSTEM_ITEM_TYPES[item.ExpenseType]) });
+
+// Other expenses that count against the monthly limit (system lines do not).
+const limitedOther = (items) => items.filter((item) => !SYSTEM_ITEM_TYPES[item.ExpenseType]).reduce((sum, item) => sum + toPaise(item.Amount), 0);
 
 const normalizeClaim = (claim) =>
     claim && {
@@ -199,10 +240,19 @@ exports.getMyClaim = async (actingUserId, query) => {
     const status = claim?.Status || 'NOT_STARTED';
     const editable = !claim || EDITABLE.includes(claim.Status);
 
+    // Unusual days go on hold (shown with the reason; paid only once decided payable).
+    const holds = await holdsOf(user.UserId, month, facts, normalizeRate(rate));
+
     // While editable, days follow verified work live; afterwards they're the submitted snapshot.
-    const days = (editable ? buildDays(facts, saved, normalizeRate(rate), claim?.ClaimId) : saved).map(normalizeDay);
+    const days = (editable ? buildDays(facts, saved, normalizeRate(rate), claim?.ClaimId, new Map(), holds) : saved).map((day) => ({
+        ...normalizeDay(day),
+        Hold: holds.get(dateKey(day.ExpenseDate)) || null,
+    }));
     const normalizedItems = items.map(normalizeItem);
     const totals = totalsOf(days, normalizedItems);
+    const released = editable ? await releasedLines(user.UserId, month, claim?.ClaimId || null) : [];
+    const reviews = [...holds.values()];
+    const sum = (list) => Math.round(list.reduce((s, r) => s + r.Amount, 0) * 100) / 100;
 
     let blockedReason = windowReason(month);
     if (!blockedReason && !editable) blockedReason = status === 'PAID' ? 'This claim has been paid.' : 'This claim has been submitted.';
@@ -220,10 +270,18 @@ exports.getMyClaim = async (actingUserId, query) => {
         days,
         items: normalizedItems,
         totals,
+        // TA / DA held for review, refused after review, and earlier days released into this claim.
+        holds: {
+            onHold: sum(reviews.filter((r) => DayReviews.OPEN.includes(r.Status))),
+            notPayable: sum(reviews.filter((r) => r.Status === 'NOT_PAYABLE')),
+            count: reviews.filter((r) => DayReviews.OPEN.includes(r.Status)).length,
+            released: released.map((line) => ({ workDate: line.workDate, amount: line.item.Amount })),
+            releasedTotal: Math.round(released.reduce((s, line) => s + line.item.Amount, 0) * 100) / 100,
+        },
         otherLimit: money(rate?.OtherMonthlyLimit),
         itemTypes: Object.entries(ITEM_TYPES).map(([value, label]) => ({ value, label })),
         canEdit: !blockedReason,
-        canSubmit: !blockedReason && totals.total > 0,
+        canSubmit: !blockedReason && (totals.total > 0 || released.length > 0),
         blockedReason,
     };
 };
@@ -249,7 +307,8 @@ exports.saveDays = async (actingUserId, payload) => {
     requireEditable(claim);
 
     const [facts, saved] = await Promise.all([workFacts(user.UserId, month), ExpensesDA.getDays(claim.ClaimId)]);
-    const days = buildDays(facts, saved, rate, claim.ClaimId, remarksByDate).map(({ VisitCount, ...day }) => day);
+    const holds = await holdsOf(user.UserId, month, facts, rate);
+    const days = buildDays(facts, saved, rate, claim.ClaimId, remarksByDate, holds).map(({ VisitCount, ...day }) => day);
 
     try {
         await ExpensesDA.replaceDays(claim.ClaimId, user.UserId, days, new Date());
@@ -285,7 +344,7 @@ exports.addItem = async (actingUserId, payload) => {
 
     if (rate.OtherMonthlyLimit != null) {
         const items = await ExpensesDA.getItems(claim.ClaimId);
-        const used = items.reduce((sum, item) => sum + toPaise(item.Amount), 0);
+        const used = limitedOther(items);
         if (used + toPaise(amount) > toPaise(rate.OtherMonthlyLimit)) {
             throw fail(400, `Other expenses can't exceed ₹${rate.OtherMonthlyLimit.toLocaleString('en-IN')} a month. ₹${toRupees(toPaise(rate.OtherMonthlyLimit) - used).toLocaleString('en-IN')} left.`);
         }
@@ -323,6 +382,8 @@ exports.deleteItem = async (actingUserId, itemId, query) => {
     const claim = await ExpensesDA.getClaim(user.UserId, month);
     if (!claim) throw fail(404, 'Claim not found.');
     requireEditable(claim);
+    const item = (await ExpensesDA.getItems(claim.ClaimId)).find((row) => lower(row.ItemId) === lower(itemId));
+    if (item && SYSTEM_ITEM_TYPES[item.ExpenseType]) throw fail(400, 'This line was added after a review and cannot be removed.');
 
     try {
         await ExpensesDA.deleteItem(claim.ClaimId, user.UserId, itemId, new Date());
@@ -347,19 +408,25 @@ exports.submit = async (actingUserId, payload) => {
 
     const [facts, saved, items] = await Promise.all([workFacts(user.UserId, month), ExpensesDA.getDays(claim.ClaimId), ExpensesDA.getItems(claim.ClaimId)]);
 
-    const days = buildDays(facts, saved, rate, claim.ClaimId).map(({ VisitCount, ...day }) => day);
-    const totals = totalsOf(days, items.map(normalizeItem));
+    const holds = await holdsOf(user.UserId, month, facts, rate);
+    const days = buildDays(facts, saved, rate, claim.ClaimId, new Map(), holds).map(({ VisitCount, ...day }) => day);
+    // Earlier days decided payable after their claim was submitted are paid with this one.
+    const released = await releasedLines(user.UserId, month, claim.ClaimId);
+    const allItems = [...items, ...released.map((line) => line.item)].map(normalizeItem);
+    const totals = totalsOf(days, allItems);
     if (totals.total <= 0) throw fail(400, 'There is nothing to claim yet: no days with valid visits or expenses this month.');
 
-    if (rate.OtherMonthlyLimit != null && toPaise(totals.other) > toPaise(rate.OtherMonthlyLimit)) {
-        throw fail(400, `Other expenses (₹${totals.other.toLocaleString('en-IN')}) exceed the monthly limit of ₹${rate.OtherMonthlyLimit.toLocaleString('en-IN')}.`);
+    const other = limitedOther(allItems);
+    if (rate.OtherMonthlyLimit != null && other > toPaise(rate.OtherMonthlyLimit)) {
+        throw fail(400, `Other expenses (₹${toRupees(other).toLocaleString('en-IN')}) exceed the monthly limit of ₹${rate.OtherMonthlyLimit.toLocaleString('en-IN')}.`);
     }
 
     // Without a reporting manager the claim goes straight to finance.
     const toStatus = user.ManagerId ? 'SUBMITTED' : 'MANAGER_APPROVED';
 
     try {
-        await ExpensesDA.submit(claim.ClaimId, user.UserId, days, toStatus, new Date());
+        const now = new Date();
+        await ExpensesDA.submit(claim.ClaimId, user.UserId, days, toStatus, now, released.flatMap((line) => [ExpensesDA.insertItemQuery(line.item), DayReviews.markReleasedQuery(line.reviewId, claim.ClaimId, now)]));
     } catch (error) {
         throw lockedError(error);
     }
@@ -586,4 +653,63 @@ exports.saveRate = async (actingUserId, designationId, payload) => {
     await ExpensesDA.saveRate({ DesignationId: designationId, ...values, OtherMonthlyLimit: limit, ModifiedBy: actingUserId, Now: new Date() });
 
     return { message: 'Rate card saved.' };
+};
+
+// =========================================================
+// Daily TA / DA statement (the employee's own)
+// =========================================================
+
+// Every work day of the month: DA, TA, total, status (earned / on hold / not payable / payable after review),
+// the reason in plain facts, and running totals. A held day is shown, never hidden.
+exports.getStatement = async (actingUserId, query) => {
+    const user = await loadUser(actingUserId);
+    const month = toMonthStart(query.month || currentMonth().slice(0, 7));
+    const [rate, facts] = await Promise.all([ExpensesDA.getRate(user.DesignationId), workFacts(user.UserId, month)]);
+    const normalized = normalizeRate(rate);
+    const price = priceFor(normalized);
+    const holds = await holdsOf(user.UserId, month, facts, normalized);
+
+    let earned = 0;
+    const rows = [...facts]
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((fact) => {
+            const review = holds.get(fact.date) || null;
+            const amount = price({ ...fact, daEligible: fact.daEligible || Boolean(review?.DaGranted) });
+            const total = Math.round((amount.da + amount.ta) * 100) / 100;
+            const status = !review ? 'EARNED' : review.Status === 'PAYABLE' ? 'PAYABLE' : review.Status === 'NOT_PAYABLE' ? 'NOT_PAYABLE' : 'ON_HOLD';
+            if (status === 'EARNED' || status === 'PAYABLE') earned = Math.round((earned + total) * 100) / 100;
+            return {
+                date: fact.date,
+                visits: fact.validVisits,
+                km: fact.km,
+                station: fact.station,
+                da: amount.da,
+                ta: amount.ta,
+                total,
+                status,
+                review,
+                canSendReason: Boolean(review) && review.Status === 'HELD',
+                earnedSoFar: earned,
+            };
+        });
+
+    const sum = (list) => Math.round(list.reduce((s, row) => s + row.total, 0) * 100) / 100;
+    const onHold = sum(rows.filter((row) => row.status === 'ON_HOLD'));
+    return {
+        month,
+        rateSet: Boolean(rate),
+        daMinValidVisits: await Allowances.daMinValidVisits(),
+        rows,
+        totals: { earned, onHold, notPayable: sum(rows.filter((row) => row.status === 'NOT_PAYABLE')), ifApproved: Math.round((earned + onHold) * 100) / 100 },
+        policy: await DayReviews.getPolicy(actingUserId),
+    };
+};
+
+// One reviewed day's amount (rupees) for head office's decision; grantDa pays DA even below the DA rule.
+exports.priceReviewedDay = async (userId, workDate, grantDa) => {
+    const user = await ExpensesDA.getUser(userId);
+    const rate = normalizeRate(await ExpensesDA.getRate(user?.DesignationId));
+    const [fact] = (await Allowances.dayFacts(userId, workDate, workDate)).filter((f) => f.date === workDate);
+    if (!rate || !fact) return { da: 0, ta: 0 };
+    return priceFor(rate)({ ...fact, daEligible: fact.daEligible || grantDa });
 };

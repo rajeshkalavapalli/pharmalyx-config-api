@@ -1,4 +1,4 @@
-const { customQuery } = require('../../utils/dbFunctions');
+const { customQuery, runInTransaction } = require('../../utils/dbFunctions');
 const sql = require('./Sql');
 
 exports.deleteUserPharmacyMappings = async (userId) => {
@@ -38,3 +38,11 @@ exports.getUserPharmacyMappingByUserId = async (userId) => {
 	);
 };	
 
+
+// Replaces the user's pharmacy list with this one, all or nothing (a failure keeps the old list).
+exports.replaceUserPharmacyMappings = async (userId, mappings) => {
+	return await runInTransaction([
+		{ sqlQuery: sql.DELETE_USER_PHARMACY_MAPPINGS(), inputs: { UserId: userId } },
+		...mappings.map((inputs) => ({ sqlQuery: sql.CREATE_USER_PHARMACY_MAPPING(), inputs })),
+	]);
+};

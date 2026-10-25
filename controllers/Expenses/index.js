@@ -29,4 +29,22 @@ router.post('/expenses/claims/:claimId/mark-paid', requirePermission('expensefin
 router.get('/expenses/rates', requirePermission('expenserates.view'), Expenses.getRates);
 router.put('/expenses/rates/:designationId', requirePermission('expenserates.edit'), Expenses.saveRate);
 
+// Daily TA / DA statement and day reviews.
+const headOffice = requirePermission('expensefinance.approve');
+router.get('/expenses/statement', requirePermission('expenses.view'), Expenses.getStatement);
+router.get('/expenses/policy', requirePermission('expenses.view'), Expenses.getPolicy);
+router.post('/expenses/policy/accept', requirePermission('expenses.view'), Expenses.acceptPolicy);
+router.post('/expenses/day-reviews/:reviewId/reason', requirePermission('expenses.create'), Expenses.sendDayReason);
+router.get('/expenses/day-reviews/manager', requirePermission('expenses.approve'), Expenses.managerQueue);
+router.post('/expenses/day-reviews/:reviewId/manager-approve', requirePermission('expenses.approve'), Expenses.managerApproveDay);
+router.post('/expenses/day-reviews/:reviewId/manager-reject', requirePermission('expenses.approve'), Expenses.managerRejectDay);
+router.get('/expenses/day-reviews/admin', headOffice, Expenses.adminQueue);
+router.get('/expenses/day-reviews/manager-rejections', headOffice, Expenses.managerRejections);
+router.get('/expenses/day-reviews/approved', headOffice, Expenses.approvedWithoutDa);
+router.post('/expenses/day-reviews/:reviewId/grant-da', headOffice, Expenses.grantDaLater);
+router.post('/expenses/day-reviews/:reviewId/admin-approve', headOffice, Expenses.adminApproveDay);
+router.post('/expenses/day-reviews/:reviewId/admin-reject', headOffice, Expenses.adminRejectDay);
+router.get('/expenses/day-reviews/:reviewId/report', headOffice, Expenses.dayReport);
+router.post('/expenses/day-reviews/:reviewId/verify', headOffice, Expenses.verifyDayReport);
+
 module.exports = router;

@@ -20,11 +20,10 @@ exports.createUserPharmacyMapping = async (userId, mapping) => {
 };
 
 exports.createUserPharmacyMappings = async (userId, mappings) => {
-	await exports.deleteUserPharmacyMappings(userId);
-
-	for (const mapping of mappings) {
-		await exports.createUserPharmacyMapping(userId, mapping);
-	}
+	await UserPharmacyMappingDA.replaceUserPharmacyMappings(
+		userId,
+		(mappings || []).filter((mapping) => mapping.pharmacyId).map((mapping) => ({ UserPharmacyMappingId: generateUUID(), UserId: userId, PharmacyId: mapping.pharmacyId }))
+	);
 
 	return {
 		success: true,

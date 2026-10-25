@@ -286,7 +286,7 @@ module.exports = {
     VALID_VISITS: () => {
         return `
             SELECT COUNT(*) AS ValidVisits FROM dbo.Visits v
-            WHERE v.UserId = @UserId AND v.VisitDate BETWEEN @From AND @To AND COALESCE(v.ValidityOverride, v.Validity) = 'VALID'
+            WHERE v.UserId = @UserId AND v.VisitDate BETWEEN @From AND @To AND COALESCE(v.ValidityOverride, v.Validity) IN ('VALID', 'REVIEW')
         `;
     },
 

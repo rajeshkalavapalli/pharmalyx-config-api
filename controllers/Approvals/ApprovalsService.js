@@ -7,6 +7,8 @@ const HRDA = require('../HR/HRDA');
 const DoctorRequestsDA = require('../DoctorRequests/DoctorRequestsDA');
 const DoctorVerificationDA = require('../DoctorVerification/DoctorVerificationDA');
 const StpService = require('../VerifiedWork/StpService');
+const Explanations = require('../VerifiedWork/ExplanationService');
+const DayReviews = require('../Expenses/DayReviewService');
 const OrdersDA = require('../Orders/OrdersDA');
 const { loadSettings: loadBusinessSettings } = require('../BusinessTracking/settings');
 
@@ -117,6 +119,56 @@ const TYPES = {
             period: `Verify Dr. ${row.DoctorName}`,
             summary: [{ REGISTRATION_NO: 'Registration no.', PHONE: 'Phone', DOCUMENT: 'Photo' }[row.Method], row.Value, row.Speciality, row.AreaName].filter(Boolean).join(' · '),
         }),
+    },
+    // An employee explained a visit that needs a look / was not counted: accept (it counts) or reject.
+    VISIT_EXPLANATION: {
+        label: 'Visit explanation',
+        load: (UserId) => Explanations.listPending(UserId).catch(() => []),
+        permission: 'dcr.approve',
+        link: '/field-operation/visits',
+        inline: true,
+        returnLabel: 'Reject',
+        describe: (row) => ({
+            period: `Visit to Dr. ${row.DoctorName || '—'} on ${dayLabel(row.VisitDate)}`,
+            summary: [
+                (row.reasons || []).map((r) => r.text).join('; ') || null,
+                row.DwellSeconds != null ? `stayed ${Math.round(row.DwellSeconds / 60)} min` : null,
+                `"${row.Reason}"`,
+            ].filter(Boolean).join(' · '),
+        }),
+        decide: (actingUserId, id, approve, remarks) => Explanations.decide(actingUserId, id, approve, { Note: remarks }),
+    },
+    // TA / DA day on hold: the reporting manager reviews (reject = final, approve = goes to head office).
+    DAY_REVIEW_MANAGER: {
+        label: 'TA / DA day review',
+        load: (UserId) => DayReviews.managerQueue(UserId).then((rows) => rows.map((r) => ({ ...r, Id: r.ReviewId, SubmittedOn: r.EmployeeAt || r.StageSince }))).catch(() => []),
+        permission: 'expenses.approve',
+        link: '/expenses/claims?tab=days',
+        inline: true,
+        returnLabel: 'Reject',
+        describe: (row) => ({
+            period: `${row.UserName}: ${dayLabel(row.WorkDate)} · ${money(row.Amount)} on hold`,
+            summary: [row.Findings.map((f) => f.text).join(' '), row.EmployeeReason ? `Reason: "${row.EmployeeReason}"` : row.AutoNote].filter(Boolean).join(' · '),
+        }),
+        decide: (actingUserId, id, approve, remarks) => DayReviews.managerDecide(actingUserId, id, approve, { Comment: remarks }),
+    },
+    // Approved by the manager: head office makes the final decision (payable / not payable).
+    DAY_REVIEW_ADMIN: {
+        label: 'TA / DA final decision',
+        load: (UserId) => DayReviews.adminQueue(UserId).then((rows) => rows.map((r) => ({ ...r, Id: r.ReviewId, SubmittedOn: r.ManagerAt || r.StageSince }))).catch(() => []),
+        permission: 'expensefinance.approve',
+        link: '/expenses/claims?tab=days',
+        inline: true,
+        returnLabel: 'Not payable',
+        describe: (row) => ({
+            period: `${row.UserName}: ${dayLabel(row.WorkDate)} · ${money(row.Amount)} on hold`,
+            summary: [
+                row.Findings.map((f) => f.text).join(' '),
+                row.EmployeeReason ? `Reason: "${row.EmployeeReason}"` : null,
+                row.ManagerDecision ? `Manager (${row.ManagerName}): "${row.ManagerComment}"` : row.AutoNote,
+            ].filter(Boolean).join(' · '),
+        }),
+        decide: (actingUserId, id, approve, remarks) => DayReviews.adminDecide(actingUserId, id, approve, { Comment: remarks }),
     },
     // Standard tour plans sent to head office; Review opens that person's plan.
     STP: {

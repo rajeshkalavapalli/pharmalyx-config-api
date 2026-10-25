@@ -16,7 +16,7 @@ const VALID_DAYS = `
            STRING_AGG(CONVERT(VARCHAR(36), TRY_CONVERT(UNIQUEIDENTIFIER, d.AreaId)), ',') AS AreaIds
     FROM dbo.Visits v
     INNER JOIN dbo.Doctor d ON d.DoctorId = v.DoctorId
-    WHERE v.UserId = @UserId AND v.VisitDate BETWEEN @From AND @To AND ${EFFECTIVE} = 'VALID'
+    WHERE v.UserId = @UserId AND v.VisitDate BETWEEN @From AND @To AND ${EFFECTIVE} IN ('VALID', 'REVIEW')
     GROUP BY v.VisitDate
 `;
 
@@ -51,6 +51,7 @@ exports.dayFacts = async (userId, from, to) => {
             validVisits,
             daEligible: validVisits >= settings.DA_MIN_VALID_VISITS,
             km: km.get(day.WorkDate)?.km || 0,
+            points: km.get(day.WorkDate)?.points || 0, // location records used for the km (day checks need a trail)
             station: rules.stationFor(types),
             travelMode: dcr?.TravelMode || 'OTHER',
             dcrId: dcr?.DcrId || null,
