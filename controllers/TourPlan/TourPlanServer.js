@@ -64,10 +64,17 @@ const getStatuses = async () => {
 
 exports.getStatuses = getStatuses;
 
+// A person's own areas: STP patches, mapped areas and doctors' areas, plus every area of the
+// territories assigned to them (so a newly added territory can be planned straight away).
+const ownAreas = async (userId) => {
+    const [mine, territory] = await Promise.all([VerifiedWorkDA.myAreas(userId), VerifiedWorkDA.territoryAreas(userId)]);
+    return [...mine, ...territory];
+};
+
 // Every planned field day must be in the MR's own territory. Work elsewhere needs head office:
 // special duty (any area that day) or leave cover (the covered colleague's areas).
 const assertInsideTerritory = async (userId, details) => {
-    const own = await VerifiedWorkDA.myAreas(userId);
+    const own = await ownAreas(userId);
     if (!own.length) return; // territory not set up yet: nothing to check against
 
     const ownIds = new Set(own.map((area) => String(area.AreaId).toLowerCase()));
@@ -80,7 +87,7 @@ const assertInsideTerritory = async (userId, details) => {
         const covers = exceptions.filter((e) => e.ExceptionType === 'COVER' && e.CoverUserId);
         let covered = false;
         for (const cover of covers) {
-            const areas = await VerifiedWorkDA.myAreas(cover.CoverUserId);
+            const areas = await ownAreas(cover.CoverUserId);
             if (areas.some((area) => String(area.AreaId).toLowerCase() === String(detail.AreaId).toLowerCase())) covered = true;
         }
         if (!covered) {
@@ -180,6 +187,14 @@ const normalizeDetails = async (monthStart, rawDetails, submit) => {
             Remarks: remarks || null,
         };
     });
+
+    // Sundays are holidays by default: a Sunday left unplanned is saved as an off day.
+    for (const date of validDates) {
+        if (!seen.has(date) && new Date(`${date}T00:00:00Z`).getUTCDay() === 0) {
+            details.push({ PlanDate: date, DayType: 'non-working', TerritoryId: null, AreaId: null, Remarks: 'Sunday' });
+            seen.add(date);
+        }
+    }
 
     if (submit) {
         const missing = [...validDates].filter((date) => !seen.has(date));
