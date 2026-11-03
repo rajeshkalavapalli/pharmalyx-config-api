@@ -37,7 +37,7 @@ const IST_OFFSET_MINUTES = 330;
 const REASONS = {
     NO_CHECKIN: 'Logged without a live check-in at the clinic (typed in later)',
     NO_GPS: 'No GPS location at check-in or check-out',
-    MOCK_GPS: 'The phone reported a fake (mock) GPS location',
+    MOCK_GPS: 'The phone reported a location-changing app',
     IN_VEHICLE: 'The phone was moving in a vehicle',
     SHORT_STOP: 'Stayed at the clinic for less than the minimum time',
     NO_REAL_STOP: 'Under a minute at the clinic (a quick call)',

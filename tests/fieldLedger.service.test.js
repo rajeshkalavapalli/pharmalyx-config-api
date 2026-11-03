@@ -72,7 +72,7 @@ test('delivery is refused away from the chemist, without the receipt photo, with
     setup();
     await rejects(() => Ledger.createDelivery(MR, delivery({ Location: here(0.01) })), 400, /from Sri Medicals/);
     await rejects(() => Ledger.createDelivery(MR, delivery({ ReceiptPhotoId: undefined })), 400, /stamped receipt/);
-    await rejects(() => Ledger.createDelivery(MR, delivery({ Location: here(0, { isMock: true }) })), 400, /mock/);
+    await rejects(() => Ledger.createDelivery(MR, delivery({ Location: here(0, { isMock: true }) })), 400, /location-changing app/);
     await rejects(() => Ledger.createDelivery(MR, delivery({ Location: { status: 'DENIED' } })), 400, /location/);
     db.answers.RECEIPT_REUSED = [{ DeliveryNumber: 'DL-000004' }];
     await rejects(() => Ledger.createDelivery(MR, delivery()), 409, /DL-000004/);

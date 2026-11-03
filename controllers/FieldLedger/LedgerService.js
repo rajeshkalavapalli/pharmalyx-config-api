@@ -69,7 +69,7 @@ const atChemist = (location, pharmacy, radius) => {
     const lng = Number(fix.longitude);
     const accuracy = fix.accuracy == null ? null : Math.round(Number(fix.accuracy));
     if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw fail(400, 'Location is invalid.');
-    if (fix.isMock === true) throw fail(400, 'Fake (mock) GPS is not allowed.');
+    if (fix.isMock === true) throw fail(400, 'A location-changing app is on. Please turn it off and try again.');
 
     if (pharmacy.Latitude != null) {
         const distance = Math.round(distanceMeters(lat, lng, Number(pharmacy.Latitude), Number(pharmacy.Longitude)));
