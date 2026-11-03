@@ -17,7 +17,10 @@ module.exports = {
     UPDATE_SETTING: () => {
         return `
             UPDATE dbo.AntiFraudSettings SET SettingValue = @SettingValue, ModifiedBy = @ActorId, ModifiedOn = @Now WHERE SettingKey = @SettingKey;
-            IF @@ROWCOUNT = 0 THROW 50404, 'Unknown setting.', 1;
+            -- A rule added after the company was set up is saved for the first time.
+            IF @@ROWCOUNT = 0
+                INSERT INTO dbo.AntiFraudSettings (SettingKey, SettingValue, Description, ModifiedBy, ModifiedOn)
+                VALUES (@SettingKey, @SettingValue, @Description, @ActorId, @Now);
         `;
     },
 

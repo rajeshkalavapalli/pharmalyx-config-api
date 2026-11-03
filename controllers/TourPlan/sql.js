@@ -198,6 +198,20 @@ module.exports = {
         `;
     },
 
+    // Owner changes a submitted or approved plan when the company wants manager approval:
+    // it goes back to the manager as a fresh submission.
+    RESUBMIT_OWN_PLAN: () => {
+        return `
+            UPDATE dbo.TourPlan
+            SET StatusId = @StatusId, ModifiedOn = @Now, SubmittedOn = @Now,
+                ReviewedBy = NULL, ReviewedOn = NULL, ReviewRemarks = NULL
+            WHERE TourPlanId = @TourPlanId;
+
+            IF @@ROWCOUNT = 0
+                THROW 50002, 'Tour plan not found.', 1;
+        `;
+    },
+
     DELETE_TOUR_PLAN_DETAILS: () => {
         return `
             DELETE FROM dbo.TourPlanDetails

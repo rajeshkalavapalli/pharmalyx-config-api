@@ -73,6 +73,13 @@ exports.replaceOwnPlan = async ({ TourPlanId, StatusId, Now, Remarks, details })
         ...detailQueries(TourPlanId, details, Now),
     ]);
 
+exports.resubmitOwnPlan = async ({ TourPlanId, StatusId, Now, details }) =>
+    await runInTransaction([
+        { sqlQuery: sql.RESUBMIT_OWN_PLAN(), inputs: { TourPlanId, StatusId, Now } },
+        { sqlQuery: sql.DELETE_TOUR_PLAN_DETAILS(), inputs: { TourPlanId } },
+        ...detailQueries(TourPlanId, details, Now),
+    ]);
+
 exports.transitionStatus = async (inputs) =>
     await runInTransaction([
         { sqlQuery: sql.TRANSITION_TOUR_PLAN_STATUS(), inputs },
