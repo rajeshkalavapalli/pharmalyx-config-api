@@ -299,7 +299,7 @@ exports.createOrder = async (actingUserId, payload) => {
         const lng = Number(location.longitude);
         const accuracy = location.accuracy == null ? null : Math.round(Number(location.accuracy));
         if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw fail(400, 'Location is invalid.');
-        if (location.isMock === true) throw fail(400, 'Fake (mock) GPS is not allowed for booking orders.');
+        if (location.isMock === true) throw fail(400, 'A location-changing app is on. Please turn it off to book this order.');
 
         const settings = await loadSettings();
         const radius = settings.CHEMIST_RADIUS_METERS;

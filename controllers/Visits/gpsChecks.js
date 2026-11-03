@@ -105,7 +105,7 @@ const checkVisit = async ({ userId, visitId, doctor, location, isMock, reason, n
     }
 
     // 2. Mock / fake GPS reported by the device (the Android app will send this).
-    if (isMock) flag('MOCK_GPS', 'HIGH', `The phone reported a fake (mock) GPS location for the visit to Dr. ${doctor.DoctorName}.`, {});
+    if (isMock) flag('MOCK_GPS', 'HIGH', `The phone reported a location-changing app during the visit to Dr. ${doctor.DoctorName}.`, {});
 
     if (location.LocationStatus === 'CAPTURED') {
         // 3. Same spot: several different clinics "visited" from one place.

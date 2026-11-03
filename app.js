@@ -94,7 +94,10 @@ const { authenticate } = require('./utils/auth');
 
 // 2 MB: data-import checks can carry a decision for every row.
 app.use(express.json({ limit: '2mb' }));
-app.use(cors());
+// CORS_ORIGINS: comma-separated web addresses allowed to call the API (the hosted web app).
+// Not set (local development): any origin.
+const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean);
+app.use(cors(allowedOrigins.length ? { origin: allowedOrigins } : {}));
 
 // Every /app route requires a verified session except POST /app/login.
 app.use('/app', authenticate);
@@ -147,8 +150,11 @@ app.use('/app', DataImport)
 
 
 
-app.listen(5000, ()=>{
-    console.log("Pharmalyx Config API running on port 5000")
+// The host (Render) gives the port in PORT; 5000 locally.
+const PORT = Number(process.env.PORT) || 5000;
+
+app.listen(PORT, ()=>{
+    console.log(`Pharmalyx Config API running on port ${PORT}`)
     // Background order checks (no reorder, month-end spike): flags for head office only.
     OrderChecks.startScheduler();
     // Stock held too long by MRs, and automatic handover on an MR's leaving date.

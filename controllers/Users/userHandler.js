@@ -1,4 +1,4 @@
-const userService = require('../Users/UserService');
+const userService = require('./userService');
 const { issueToken, issueChoiceTicket, verifyChoiceTicket } = require('../../utils/auth');
 const { getSeats } = require('../../utils/seats');
 
