@@ -4,6 +4,7 @@ const StockService = require('../Stock/StockService');
 const VerifiedWork = require('../VerifiedWork/VerifiedWorkService');
 const VerifiedWorkDA = require('../VerifiedWork/VerifiedWorkDA');
 const Explanations = require('../VerifiedWork/ExplanationService');
+const JointWork = require('../JointWork/JointWorkService');
 
 // A planned call for this doctor and day becomes "visited". Missing table = no-op
 // (SQL Server defers name resolution for tables that don't exist yet).
@@ -286,15 +287,18 @@ exports.createVisit = async (actingUserId, payload) => {
         throw fail(400, 'End time must be after the start time.');
     }
 
-    // Joint work
-    const jointWorkUserId = optionalGuid(payload.JointWorkUserId, 'Joint work colleague');
+    // Joint work: colleagues chosen on the visit (JointWorkUserIds, or the older single JointWorkUserId).
+    // None chosen: the day's joint work colleagues are attached when the visit is saved.
+    const chosenColleagues = [...(Array.isArray(payload.JointWorkUserIds) ? payload.JointWorkUserIds : []), payload.JointWorkUserId]
+        .map((id) => optionalGuid(id, 'Joint work colleague'))
+        .filter(Boolean);
 
-    if (jointWorkUserId) {
-        if (sameId(jointWorkUserId, actingUserId)) {
+    for (const colleagueId of chosenColleagues) {
+        if (sameId(colleagueId, actingUserId)) {
             throw fail(400, 'Choose a colleague other than yourself for joint work.');
         }
 
-        if (!(await VisitsDA.getUser(jointWorkUserId))) {
+        if (!(await VisitsDA.getUser(colleagueId))) {
             throw fail(400, 'Joint work colleague not found.');
         }
     }
@@ -400,6 +404,8 @@ exports.createVisit = async (actingUserId, payload) => {
         }
     }
 
+    const joint = await JointWork.forVisit(actingUserId, visitDate, visitId, chosenColleagues);
+
     // Samples & gifts given: validated here, balance-checked inside the transaction.
     const items = Array.isArray(payload.Items) && payload.Items.length > 0 ? payload.Items : null;
     const distribution = await StockService.buildVisitDistribution({
@@ -408,7 +414,7 @@ exports.createVisit = async (actingUserId, payload) => {
         visitId,
         visitDate,
         items,
-        jointWorkUserId,
+        jointWorkUserId: joint.ids[0] || null,
         location,
     });
 
@@ -428,7 +434,7 @@ exports.createVisit = async (actingUserId, payload) => {
                 VisitDate: visitDate,
                 StartTime: startTime || autoStart,
                 EndTime: endTime || autoEnd,
-                JointWorkUserId: jointWorkUserId,
+                JointWorkUserId: joint.ids[0] || null,
                 Feedback: feedback,
                 Notes: notes || null,
                 FollowUpDate: followUpDate,
@@ -448,6 +454,7 @@ exports.createVisit = async (actingUserId, payload) => {
                 ...gps.flagQueries,
                 ...(work.checkIn ? [VerifiedWork.useCheckInQuery(work.checkIn.id, visitId)] : []),
                 ...VerifiedWork.flagQueries(work.flags, visitId),
+                ...joint.queries,
             ]
         );
     } catch (error) {
