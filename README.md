@@ -287,3 +287,14 @@
 - New company rule TOUR_PLAN_APPROVAL (Rules / Settings): 1 = confirmed tour plans go to the reporting manager for approval, 0 = approved straight away inside the territory (default); rules added later can be saved for the first time from Settings
 - Review alerts go up the reporting line (ASM, RSM, ZSM ... head office), never to the person they are about; employees see a neutral "in review" status for their own TA / DA days and visits
 - Joint work (controllers/JointWork, tables JointWorkDays and VisitJointWorkers, run the SQL in SSMS): ask managers / team / territory colleagues to work a day together, they confirm or decline, the day's visits carry the colleagues automatically, coaching feedback (1-5 rating + notes) shown to the field person; API /app/joint-work
+
+
+### V 1.0.65
+
+- Joint work in the tour plan (column TourPlanDetails.JointWithUserId, run the SQL in SSMS): a senior (ASM, RSM ...) plans a day as "joint work with <team member>"; the area is the team member's planned area for that date; no acceptance needed in the hierarchy
+- Clash checks: a senior can't plan joint work on the team member's off day, an unplanned Sunday or a day of pending / approved leave; only own team members (any level below)
+- Saving the plan (not as a draft) confirms the joint days and locks them in the team member's plan: they can't make it an off day or change the area, only fill the area while it is empty
+- A senior can move a team member's planned day to another area (POST /app/tourplan/team/:userId/day); it is recorded in the team member's plan as an approved deviation "Changed by <senior> for joint work"
+- Leave: applying for leave on a joint day warns the person; approved leave cancels the joint day and the senior gets a "replan" alert
+- My Day (/app/work/today) shows today's joint work; alerts show joint days a senior planned with me in the next week
+- Joint work days planned from the tour plan can't be cancelled or declined from the Joint Work page

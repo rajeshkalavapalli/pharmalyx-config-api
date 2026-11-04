@@ -68,6 +68,14 @@ exports.rejectTourPlan = async (req, res) => {
     }
 };
 
+exports.changeMemberDay = async (req, res) => {
+    try {
+        return res.status(200).json(await TourPlanService.changeMemberDay(actingUser(req), req.params.userId, req.body || {}));
+    } catch (error) {
+        return respond(res, 'change the team member\'s day')(error);
+    }
+};
+
 exports.getTeamPlans = async (req, res) => {
     try {
         const result = await TourPlanService.getTeamPlans(actingUser(req), req.query.planMonth);

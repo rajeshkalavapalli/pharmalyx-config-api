@@ -1,6 +1,7 @@
 const HRDA = require('./HRDA');
 
 const { generateUUID } = require('../../utils/commonUtils');
+const JointWork = require('../JointWork/JointWorkService');
 const { resolveScope } = require('../../utils/reportScope');
 const { fail, isGuid, optionalText, requireActingUser, sameId, toDateKey, todayKey } = require('../../utils/access');
 
@@ -110,7 +111,13 @@ exports.apply = async (actingUserId, payload) => {
 
     await HRDA.createLeave({ LeaveId: generateUUID(), UserId: actingUserId, LeaveTypeId: type.LeaveTypeId, FromDate: from, ToDate: to, HalfDay: halfDay ? 1 : 0, Days: days, Reason: reason, Now: new Date() });
 
-    return { message: `${type.Name} for ${days} day(s) sent to your manager.` };
+    // Leave is allowed on a planned joint work day (it can be urgent); the person is told, and the
+    // joint day is cancelled when the leave is approved.
+    const clashes = await JointWork.leaveClashes(actingUserId, from, to);
+    const note = clashes.length
+        ? ` Joint work was planned on ${clashes.map((c) => `${c.WorkDate} (with ${c.withName})`).join(', ')}; it will be cancelled if the leave is approved.`
+        : '';
+    return { message: `${type.Name} for ${days} day(s) sent to your manager.${note}`, jointWorkClashes: clashes };
 };
 
 exports.cancel = async (actingUserId, leaveId) => {
@@ -144,6 +151,9 @@ exports.review = async (actingUserId, leaveId, approve, remarks) => {
 
     const changed = await HRDA.setLeaveStatus({ LeaveId: leaveId, FromStatus: 'PENDING', Status: approve ? 'APPROVED' : 'REJECTED', ReviewedBy: actingUserId, Remarks: note, Now: new Date() });
     if (!changed) throw fail(409, 'This leave was updated meanwhile. Refresh and try again.');
+
+    // Approved leave cancels the person's joint work days in it (the planner sees a "replan" alert).
+    if (approve) await JointWork.cancelForLeave(leave.UserId, leave.UserName, String(leave.FromDate).slice(0, 10), String(leave.ToDate).slice(0, 10));
 
     return { message: `${leave.UserName}'s leave ${approve ? 'approved' : 'rejected'}.` };
 };

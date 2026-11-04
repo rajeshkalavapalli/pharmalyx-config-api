@@ -1,4 +1,5 @@
 const DA = require('./VerifiedWorkDA');
+const JointWork = require('../JointWork/JointWorkService');
 const HRDA = require('../HR/HRDA');
 const rules = require('./rules');
 const { distanceMeters } = require('../../utils/doctorMatching');
@@ -456,7 +457,7 @@ exports.getToday = async (actingUserId) => {
     const today = rules.istDateKey();
     const month = `${today.slice(0, 8)}01`;
 
-    const [planned, workDay, consent, doctors, visits, areas, territory] = await Promise.all([
+    const [planned, workDay, consent, doctors, visits, areas, territory, jointWork] = await Promise.all([
         DA.plannedDay(actingUserId, today),
         DA.getWorkDay(actingUserId, today),
         DA.getConsent(actingUserId, CONSENT_VERSION),
@@ -464,6 +465,7 @@ exports.getToday = async (actingUserId) => {
         DA.dayVisits(actingUserId, today),
         DA.myAreas(actingUserId),
         allowedTerritory(actingUserId, today),
+        JointWork.todayFor(actingUserId),
     ]);
 
     const patch = planned?.AreaId ? areas.find((area) => sameId(area.AreaId, planned.AreaId)) : null;
@@ -478,6 +480,8 @@ exports.getToday = async (actingUserId) => {
             : null,
         workDay,
         consent: { version: CONSENT_VERSION, accepted: Boolean(consent) },
+        // Today's joint work: who I work with, and the field person's planned area.
+        jointWork,
         rules: {
             minDwellMinutes: settings.MIN_DWELL_MINUTES,
             clinicRadius: settings.GEOFENCE_METERS,

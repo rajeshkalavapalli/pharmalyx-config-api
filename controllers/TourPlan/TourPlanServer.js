@@ -4,6 +4,8 @@ const TourPlanDA = require('./TourPlanDA');
 const { generateUUID } = require('../../utils/commonUtils');
 const VerifiedWorkDA = require('../VerifiedWork/VerifiedWorkDA');
 const { loadSettings } = require('../VerifiedWork/territory');
+const JointPlan = require('./jointPlan');
+const { istDateKey } = require('../VerifiedWork/rules');
 
 const AUTO_APPROVED = 'Inside the territory: saved without manager approval.';
 const SENT_FOR_APPROVAL = 'Sent to your manager for approval.';
@@ -19,6 +21,8 @@ const fail = (status, message) => {
     error.status = status;
     return error;
 };
+
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const sameId = (a, b) =>
     a != null && b != null && String(a).toLowerCase() === String(b).toLowerCase();
@@ -84,7 +88,7 @@ const assertInsideTerritory = async (userId, details) => {
     if (!own.length) return; // territory not set up yet: nothing to check against
 
     const ownIds = new Set(own.map((area) => String(area.AreaId).toLowerCase()));
-    const outside = details.filter((detail) => detail.DayType === 'working' && detail.AreaId && !ownIds.has(String(detail.AreaId).toLowerCase()));
+    const outside = details.filter((detail) => detail.DayType === 'working' && !detail.JointWithUserId && detail.AreaId && !ownIds.has(String(detail.AreaId).toLowerCase()));
 
     for (const detail of outside) {
         const exceptions = await VerifiedWorkDA.activeExceptions(userId, detail.PlanDate);
@@ -150,6 +154,13 @@ const normalizeDetails = async (monthStart, rawDetails, submit) => {
 
         if (remarks.length > 200) {
             throw fail(400, `Remarks for ${planDate} cannot exceed 200 characters.`);
+        }
+
+        if (detail.JointWithUserId) {
+            if (detail.DayType !== 'working' || !GUID.test(String(detail.JointWithUserId))) {
+                throw fail(400, `Joint work for ${planDate} needs a working day and a team member.`);
+            }
+            return { PlanDate: planDate, DayType: 'working', TerritoryId: null, AreaId: null, Remarks: remarks || null, JointWithUserId: detail.JointWithUserId };
         }
 
         if (detail.DayType === 'non-working') {
@@ -250,8 +261,11 @@ exports.getTourPlan = async (actingUserId, userId, planMonth) => {
         needsApproval: approval,
     };
 
+    // Days a senior planned as joint work with this person: locked in their plan.
+    const locks = await JointPlan.locksFor(targetUserId, monthStart);
+
     if (!plan) {
-        return { plan: null, owner };
+        return { plan: null, owner, locks };
     }
 
     const isOwner = sameId(plan.UserId, actingUserId);
@@ -282,7 +296,65 @@ exports.getTourPlan = async (actingUserId, userId, planMonth) => {
             canApprove: isManager && !isOwner && status === 'SUBMITTED',
         },
         owner,
+        locks,
     };
+};
+
+// =========================================================
+// SENIOR: move a team member's planned day to another area (for joint work)
+// =========================================================
+
+// Recorded in the team member's plan as an approved deviation ("changed by <senior> for joint work").
+exports.changeMemberDay = async (actingUserId, memberId, payload = {}) => {
+    requireActingUser(actingUserId);
+    if (!GUID.test(String(memberId))) throw fail(400, 'Team member is invalid.');
+    if (sameId(memberId, actingUserId)) throw fail(400, 'Change your own days in your plan.');
+    if (!(await TourPlanDA.isInTeam(memberId, actingUserId))) throw fail(403, 'You can change the plan of your own team members only.');
+
+    const date = String(payload.PlanDate || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw fail(400, 'Choose the date.');
+    if (date < istDateKey()) throw fail(400, 'Past days cannot be changed.');
+    if (!GUID.test(String(payload.TerritoryId)) || !GUID.test(String(payload.AreaId))) throw fail(400, 'Choose the territory and area.');
+
+    const areas = await TourPlanDA.getAreaTerritories();
+    const owner = areas.find((area) => sameId(area.AreaId, payload.AreaId));
+    if (!owner || !sameId(owner.TerritoryId, payload.TerritoryId)) throw fail(400, 'Area does not belong to the selected territory.');
+
+    const day = (await TourPlanDA.memberDays(memberId, `${date.slice(0, 8)}01`)).find((row) => row.PlanDate === date);
+    if (!day || day.DayType !== 'working') throw fail(409, 'That day is not a planned working day of this team member.');
+    if (sameId(day.AreaId, payload.AreaId)) throw fail(400, 'That is already the planned area.');
+
+    // The new area must be in the team member's territory (or covered by special duty / leave cover).
+    await assertInsideTerritory(memberId, [{ PlanDate: date, DayType: 'working', AreaId: payload.AreaId }]);
+
+    const [senior, member] = await Promise.all([TourPlanDA.getOwner(actingUserId), TourPlanDA.getOwner(memberId)]);
+    const now = new Date();
+    const reason = `Changed by ${senior?.Name || 'the manager'} for joint work`.slice(0, 200);
+    const deviationId = generateUUID();
+    try {
+        await TourPlanDA.changeMemberDay({
+            change: { UserId: memberId, PlanDate: date, TerritoryId: payload.TerritoryId, AreaId: payload.AreaId, Remarks: reason, Now: now },
+            deviation: {
+                DeviationId: deviationId,
+                UserId: memberId,
+                DeviationDate: date,
+                PlannedTerritoryId: day.TerritoryId || null,
+                PlannedAreaId: day.AreaId || null,
+                ActualTerritoryId: payload.TerritoryId,
+                ActualAreaId: payload.AreaId,
+                DeviationType: sameId(day.TerritoryId, payload.TerritoryId) ? 'Area Change' : 'Territory Change',
+                Source: 'Manager Changed',
+                Reason: reason,
+                Remarks: null,
+                SubmittedOn: now,
+            },
+            approval: { DeviationId: deviationId, ReviewedBy: actingUserId, Now: now, Remarks: 'Approved: changed by the manager' },
+        });
+    } catch (err) {
+        if (err.number === 50409) throw fail(409, err.message);
+        throw err;
+    }
+    return { message: `${member?.Name || 'Team member'}'s plan for ${date} moved. It shows as a deviation approved by you.` };
 };
 
 // =========================================================
@@ -382,6 +454,7 @@ exports.saveTourPlan = async (actingUserId, tourPlanPayload) => {
     const submit = tourPlanPayload.Submit === true;
     const monthStart = toMonthStart(tourPlanPayload.PlanMonth);
     const details = await normalizeDetails(monthStart, tourPlanPayload.details, submit);
+    const jointDays = await JointPlan.prepare(actingUserId, monthStart, details);
     await assertInsideTerritory(actingUserId, details);
 
     const [statuses, existing, ownerRow] = await Promise.all([
@@ -392,6 +465,19 @@ exports.saveTourPlan = async (actingUserId, tourPlanPayload) => {
     const approval = await needsApproval(ownerRow);
     const now = new Date();
 
+    // Days a senior planned with me stay as they are (only the senior changes them).
+    await JointPlan.assertLocks(actingUserId, monthStart, details, existing ? await TourPlanDA.getTourPlanDetails(existing.TourPlanId) : []);
+
+    const result = await saveDays({ actingUserId, monthStart, submit, details, statuses, existing, now, approval });
+
+    // A saved plan (not a draft) makes its joint work days real: confirmed and locked for the team members.
+    if (result.Status !== 'DRAFT') await JointPlan.sync(actingUserId, monthStart, jointDays);
+    return jointDays.length && result.Status !== 'DRAFT'
+        ? { ...result, message: `${result.message} Your team members can see the joint work days.` }
+        : result;
+};
+
+const saveDays = async ({ actingUserId, monthStart, submit, details, statuses, existing, now, approval }) => {
     try {
         if (approval) return await saveForApproval({ actingUserId, monthStart, submit, details, statuses, existing, now });
 
