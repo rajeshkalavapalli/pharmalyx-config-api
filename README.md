@@ -298,3 +298,9 @@
 - Leave: applying for leave on a joint day warns the person; approved leave cancels the joint day and the senior gets a "replan" alert
 - My Day (/app/work/today) shows today's joint work; alerts show joint days a senior planned with me in the next week
 - Joint work days planned from the tour plan can't be cancelled or declined from the Joint Work page
+
+
+### V 1.0.66
+
+- Uploaded files (doctor signboard photos, order slips, delivery receipts, spend documents) can be stored in the database: set `FILE_STORE=db` (table dbo.FileBlobs, run the SQL in SSMS). Hosts without a lasting disk (Render) keep the files across deploys
+- Without the table, or without `FILE_STORE=db`, files stay in the uploads folder as before; files saved in the folder earlier still open after the switch
