@@ -17,7 +17,10 @@ module.exports = {
     UPDATE_SETTING: () => {
         return `
             UPDATE dbo.AntiFraudSettings SET SettingValue = @SettingValue, ModifiedBy = @ActorId, ModifiedOn = @Now WHERE SettingKey = @SettingKey;
-            IF @@ROWCOUNT = 0 THROW 50404, 'Unknown setting.', 1;
+            -- A rule added after the company was set up is saved for the first time.
+            IF @@ROWCOUNT = 0
+                INSERT INTO dbo.AntiFraudSettings (SettingKey, SettingValue, Description, ModifiedBy, ModifiedOn)
+                VALUES (@SettingKey, @SettingValue, @Description, @ActorId, @Now);
         `;
     },
 
@@ -472,7 +475,8 @@ module.exports = {
             INNER JOIN Users u ON u.UserId = f.UserId
             LEFT JOIN dbo.Doctor d ON d.DoctorId = f.DoctorId
             LEFT JOIN Users ab ON ab.UserId = f.ActedBy
-            WHERE (@Status IS NULL OR f.Status = @Status)
+            -- Alerts about someone go up their reporting line (and to head office), never to the person.
+            WHERE (@Status IS NULL OR f.Status = @Status) AND f.UserId <> @ActingUserId
             ORDER BY CASE WHEN f.Status = 'OPEN' THEN 0 ELSE 1 END, f.CreatedOn DESC
         `;
     },

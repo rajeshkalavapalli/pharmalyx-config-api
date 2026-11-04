@@ -68,10 +68,27 @@ const LIMITS = {
     FOCUS_VISIT_EFFORT: [0, 10000],
     SPEND_ON_TRACK_PCT: [10, 200],
     SPEND_PARTLY_PCT: [0, 100],
+    // Tour plan
+    TOUR_PLAN_APPROVAL: [0, 1],
+};
+
+// Rules added after a company was set up: shown with their default until head office saves them.
+const NEW_SETTINGS = {
+    TOUR_PLAN_APPROVAL: 'Tour plans need manager approval (1 = yes, 0 = approved straight away inside the territory)',
+};
+
+// Saved rows, plus any newer rule this company has not saved yet.
+const settingRows = async () => {
+    const rows = await DA.getSettings();
+    const saved = new Set(rows.map((row) => row.SettingKey));
+    const missing = Object.entries(NEW_SETTINGS)
+        .filter(([key]) => !saved.has(key))
+        .map(([key, description]) => ({ SettingKey: key, SettingValue: rules.DEFAULTS[key], Description: description }));
+    return [...rows, ...missing];
 };
 
 exports.getSettings = async () => {
-    const rows = await DA.getSettings();
+    const rows = await settingRows();
     return {
         settings: rows.map((row) => ({ key: row.SettingKey, value: Number(row.SettingValue), description: row.Description, limits: LIMITS[row.SettingKey] || null })),
     };
@@ -80,7 +97,9 @@ exports.getSettings = async () => {
 exports.saveSettings = async (actingUserId, payload) => {
     requireActingUser(actingUserId);
     const reason = reasonText(payload.Reason);
-    const current = new Map((await DA.getSettings()).map((row) => [row.SettingKey, Number(row.SettingValue)]));
+    const all = await settingRows();
+    const current = new Map(all.map((row) => [row.SettingKey, Number(row.SettingValue)]));
+    const descriptions = new Map(all.map((row) => [row.SettingKey, row.Description]));
     const changes = Object.entries(payload.Values || {}).filter(([key, value]) => current.has(key) && Number(value) !== current.get(key));
     if (!changes.length) throw fail(400, 'Nothing was changed.');
 
@@ -88,7 +107,7 @@ exports.saveSettings = async (actingUserId, payload) => {
         const number = Number(value);
         const [min, max] = LIMITS[key] || [0, 100000];
         if (!Number.isFinite(number) || number < min || number > max) throw fail(400, `${key} must be between ${min} and ${max}.`);
-        return { SettingKey: key, SettingValue: number, ActorId: actingUserId, Now: new Date() };
+        return { SettingKey: key, SettingValue: number, Description: descriptions.get(key), ActorId: actingUserId, Now: new Date() };
     });
 
     const before = Object.fromEntries(changes.map(([key]) => [key, current.get(key)]));

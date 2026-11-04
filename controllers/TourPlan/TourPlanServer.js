@@ -3,8 +3,14 @@ const TourPlanDA = require('./TourPlanDA');
 
 const { generateUUID } = require('../../utils/commonUtils');
 const VerifiedWorkDA = require('../VerifiedWork/VerifiedWorkDA');
+const { loadSettings } = require('../VerifiedWork/territory');
 
 const AUTO_APPROVED = 'Inside the territory: saved without manager approval.';
+const SENT_FOR_APPROVAL = 'Sent to your manager for approval.';
+
+// Company rule TOUR_PLAN_APPROVAL: 1 = the reporting manager approves confirmed plans.
+// Someone without a reporting manager is never left waiting: their plan is approved straight away.
+const needsApproval = async (owner) => Boolean(owner?.ManagerId) && Number((await loadSettings()).TOUR_PLAN_APPROVAL) === 1;
 
 const DAY_TYPES = ['working', 'non-working'];
 
@@ -64,10 +70,17 @@ const getStatuses = async () => {
 
 exports.getStatuses = getStatuses;
 
+// A person's own areas: STP patches, mapped areas and doctors' areas, plus every area of the
+// territories assigned to them (so a newly added territory can be planned straight away).
+const ownAreas = async (userId) => {
+    const [mine, territory] = await Promise.all([VerifiedWorkDA.myAreas(userId), VerifiedWorkDA.territoryAreas(userId)]);
+    return [...mine, ...territory];
+};
+
 // Every planned field day must be in the MR's own territory. Work elsewhere needs head office:
 // special duty (any area that day) or leave cover (the covered colleague's areas).
 const assertInsideTerritory = async (userId, details) => {
-    const own = await VerifiedWorkDA.myAreas(userId);
+    const own = await ownAreas(userId);
     if (!own.length) return; // territory not set up yet: nothing to check against
 
     const ownIds = new Set(own.map((area) => String(area.AreaId).toLowerCase()));
@@ -80,7 +93,7 @@ const assertInsideTerritory = async (userId, details) => {
         const covers = exceptions.filter((e) => e.ExceptionType === 'COVER' && e.CoverUserId);
         let covered = false;
         for (const cover of covers) {
-            const areas = await VerifiedWorkDA.myAreas(cover.CoverUserId);
+            const areas = await ownAreas(cover.CoverUserId);
             if (areas.some((area) => String(area.AreaId).toLowerCase() === String(detail.AreaId).toLowerCase())) covered = true;
         }
         if (!covered) {
@@ -181,6 +194,14 @@ const normalizeDetails = async (monthStart, rawDetails, submit) => {
         };
     });
 
+    // Sundays are holidays by default: a Sunday left unplanned is saved as an off day.
+    for (const date of validDates) {
+        if (!seen.has(date) && new Date(`${date}T00:00:00Z`).getUTCDay() === 0) {
+            details.push({ PlanDate: date, DayType: 'non-working', TerritoryId: null, AreaId: null, Remarks: 'Sunday' });
+            seen.add(date);
+        }
+    }
+
     if (submit) {
         const missing = [...validDates].filter((date) => !seen.has(date));
 
@@ -217,6 +238,8 @@ exports.getTourPlan = async (actingUserId, userId, planMonth) => {
         throw fail(403, 'You are not allowed to view this tour plan.');
     }
 
+    const approval = await needsApproval(ownerRow);
+
     const owner = {
         UserId: ownerRow.UserId,
         Name: ownerRow.Name,
@@ -224,6 +247,7 @@ exports.getTourPlan = async (actingUserId, userId, planMonth) => {
         ManagerId: ownerRow.ManagerId,
         ManagerName: ownerRow.ManagerId ? ownerRow.ManagerName : null,
         isSelf: sameId(ownerRow.UserId, actingUserId),
+        needsApproval: approval,
     };
 
     if (!plan) {
@@ -360,11 +384,17 @@ exports.saveTourPlan = async (actingUserId, tourPlanPayload) => {
     const details = await normalizeDetails(monthStart, tourPlanPayload.details, submit);
     await assertInsideTerritory(actingUserId, details);
 
-    const statuses = await getStatuses();
-    const existing = await TourPlanDA.getTourPlanByUserMonth(actingUserId, monthStart);
+    const [statuses, existing, ownerRow] = await Promise.all([
+        getStatuses(),
+        TourPlanDA.getTourPlanByUserMonth(actingUserId, monthStart),
+        TourPlanDA.getOwner(actingUserId),
+    ]);
+    const approval = await needsApproval(ownerRow);
     const now = new Date();
 
     try {
+        if (approval) return await saveForApproval({ actingUserId, monthStart, submit, details, statuses, existing, now });
+
         if (!existing) {
             const TourPlanId = generateUUID();
 
@@ -404,6 +434,43 @@ exports.saveTourPlan = async (actingUserId, tourPlanPayload) => {
     } catch (err) {
         throw mapDbError(err);
     }
+};
+
+// The company wants manager approval: a confirmed plan waits as SUBMITTED until the manager decides.
+const saveForApproval = async ({ actingUserId, monthStart, submit, details, statuses, existing, now }) => {
+    if (!existing) {
+        const TourPlanId = generateUUID();
+        await TourPlanDA.createTourPlan({
+            TourPlanId,
+            UserId: actingUserId,
+            PlanMonth: monthStart,
+            StatusId: submit ? statuses.SUBMITTED : statuses.DRAFT,
+            SubmittedOn: submit ? now : null,
+            CreatedOn: now,
+            ModifiedOn: null,
+            details,
+        });
+        return { TourPlanId, Status: submit ? 'SUBMITTED' : 'DRAFT', message: submit ? SENT_FOR_APPROVAL : 'Draft saved.' };
+    }
+
+    const current = statusKey(statuses, existing.StatusId);
+
+    // Changing a plan the manager has (or is about to) see sends it back for approval.
+    if (current === 'SUBMITTED' || current === 'APPROVED') {
+        await TourPlanDA.resubmitOwnPlan({ TourPlanId: existing.TourPlanId, StatusId: statuses.SUBMITTED, Now: now, details });
+        return { TourPlanId: existing.TourPlanId, Status: 'SUBMITTED', message: SENT_FOR_APPROVAL };
+    }
+
+    await TourPlanDA.updateTourPlan({
+        TourPlanId: existing.TourPlanId,
+        StatusId: submit ? statuses.SUBMITTED : statuses.DRAFT,
+        DraftStatusId: statuses.DRAFT,
+        RejectedStatusId: statuses.REJECTED,
+        SubmittedOn: submit ? now : null,
+        ModifiedOn: now,
+        details,
+    });
+    return { TourPlanId: existing.TourPlanId, Status: submit ? 'SUBMITTED' : 'DRAFT', message: submit ? SENT_FOR_APPROVAL : 'Draft saved.' };
 };
 
 const decide = async (actingUserId, tourPlanId, outcome, remarks) => {

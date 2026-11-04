@@ -246,7 +246,7 @@ exports.getMyClaim = async (actingUserId, query) => {
     // While editable, days follow verified work live; afterwards they're the submitted snapshot.
     const days = (editable ? buildDays(facts, saved, normalizeRate(rate), claim?.ClaimId, new Map(), holds) : saved).map((day) => ({
         ...normalizeDay(day),
-        Hold: holds.get(dateKey(day.ExpenseDate)) || null,
+        Hold: DayReviews.forEmployee(holds.get(dateKey(day.ExpenseDate))) || null,
     }));
     const normalizedItems = items.map(normalizeItem);
     const totals = totalsOf(days, normalizedItems);
@@ -687,7 +687,7 @@ exports.getStatement = async (actingUserId, query) => {
                 ta: amount.ta,
                 total,
                 status,
-                review,
+                review: DayReviews.forEmployee(review),
                 canSendReason: Boolean(review) && review.Status === 'HELD',
                 earnedSoFar: earned,
             };

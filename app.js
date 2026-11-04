@@ -87,6 +87,7 @@ const FieldLedgerChecks = require('./controllers/FieldLedger/checks');
 const DayReviews = require('./controllers/Expenses/DayReviewService');
 const DoctorSpend = require('./controllers/DoctorSpend');
 const DataImport = require('./controllers/DataImport');
+const JointWork = require('./controllers/JointWork');
 
 // Database: db.js connects at start-up and retries on its own until SQL Server answers.
 require('./db');
@@ -146,6 +147,7 @@ app.use('/app', BusinessTracking)
 app.use('/app', FieldLedger)
 app.use('/app', DoctorSpend)
 app.use('/app', DataImport)
+app.use('/app', JointWork)
 
 
 

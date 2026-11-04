@@ -25,6 +25,7 @@ const DEFAULTS = {
     ONE_SPOT_VISITS: 5, // this many visits to doctors of different areas ...
     ONE_SPOT_METERS: 100, // ... reported from within this distance of each other
     NO_TRAVEL_KM: 5, // an Ex-HQ / Outstation day with less travel than this
+    TOUR_PLAN_APPROVAL: 0, // 1 = the reporting manager approves every confirmed tour plan
 };
 
 const IST_OFFSET_MINUTES = 330;
@@ -47,6 +48,13 @@ const REASONS = {
     NO_BOUNDARY: 'No approved territory boundary yet',
     OVERLAP: 'Overlaps another visit at the same time',
     ON_LEAVE: 'Logged on a day of approved leave',
+};
+
+// What the visit's own MR reads for checks that are for the manager to look at (the manager and
+// head office still see the reason above). Every other reason is practical guidance and stays as is.
+const OWNER_REASONS = {
+    MOCK_GPS: 'Your manager will take a quick look at the location of this visit',
+    IN_VEHICLE: 'Your manager will take a quick look at the location of this visit',
 };
 
 const HARD_REASONS = new Set(['NO_CHECKIN', 'NO_GPS', 'MOCK_GPS', 'OUTSIDE_TERRITORY', 'OVERLAP', 'ON_LEAVE']);
@@ -376,6 +384,7 @@ const stationFor = (patchTypes) => {
 module.exports = {
     DEFAULTS,
     REASONS,
+    OWNER_REASONS,
     SLOTS,
     istDateKey,
     istHour,

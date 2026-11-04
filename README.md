@@ -276,3 +276,14 @@
 ### V 1.0.63
 
 - updated one to many organisations
+
+
+### V 1.0.64
+
+- Ready for Render + Azure SQL: port from `PORT`, `npm start`, `DB_ENCRYPT=true` for Azure, `CORS_ORIGINS` to allow only the hosted web apps
+- Fixed `require('../Users/UserService')` letter case (crashed on Linux / Render)
+- Softer wording for GPS checks and alerts: "Location app detected", "Unusual travel time", "Very short visit", "Review alerts" (no "fake" / "fraud" words shown to users)
+- Tour plan: areas of the user's assigned territories count as their own (a newly added territory can be planned); an unplanned Sunday is saved as an off day
+- New company rule TOUR_PLAN_APPROVAL (Rules / Settings): 1 = confirmed tour plans go to the reporting manager for approval, 0 = approved straight away inside the territory (default); rules added later can be saved for the first time from Settings
+- Review alerts go up the reporting line (ASM, RSM, ZSM ... head office), never to the person they are about; employees see a neutral "in review" status for their own TA / DA days and visits
+- Joint work (controllers/JointWork, tables JointWorkDays and VisitJointWorkers, run the SQL in SSMS): ask managers / team / territory colleagues to work a day together, they confirm or decline, the day's visits carry the colleagues automatically, coaching feedback (1-5 rating + notes) shown to the field person; API /app/joint-work
