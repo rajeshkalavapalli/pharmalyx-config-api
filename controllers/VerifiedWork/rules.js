@@ -50,6 +50,13 @@ const REASONS = {
     ON_LEAVE: 'Logged on a day of approved leave',
 };
 
+// What the visit's own MR reads for checks that are for the manager to look at (the manager and
+// head office still see the reason above). Every other reason is practical guidance and stays as is.
+const OWNER_REASONS = {
+    MOCK_GPS: 'Your manager will take a quick look at the location of this visit',
+    IN_VEHICLE: 'Your manager will take a quick look at the location of this visit',
+};
+
 const HARD_REASONS = new Set(['NO_CHECKIN', 'NO_GPS', 'MOCK_GPS', 'OUTSIDE_TERRITORY', 'OVERLAP', 'ON_LEAVE']);
 
 // Under this many seconds a visit is a quick call (needs a look, still counts); many quick calls
@@ -377,6 +384,7 @@ const stationFor = (patchTypes) => {
 module.exports = {
     DEFAULTS,
     REASONS,
+    OWNER_REASONS,
     SLOTS,
     istDateKey,
     istHour,

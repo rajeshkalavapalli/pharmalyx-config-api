@@ -93,7 +93,7 @@ module.exports = {
         `;
     },
 
-    // GPS fraud flags written at visit time, for people in scope.
+    // GPS review alerts written at visit time, for people in scope (never the viewer's own).
     GPS_FLAGS: () => {
         return `
             ${SCOPE_CTE}
@@ -103,7 +103,7 @@ module.exports = {
             INNER JOIN dbo.FraudFlags f ON f.UserId = s.UserId
             INNER JOIN Users u ON u.UserId = f.UserId
             LEFT JOIN dbo.Doctor d ON d.DoctorId = f.DoctorId
-            WHERE f.CreatedOn >= @Since AND ${IN_SCOPE('f.UserId')}
+            WHERE f.CreatedOn >= @Since AND ${IN_SCOPE('f.UserId')} AND f.UserId <> @ActingUserId
         `;
     },
 

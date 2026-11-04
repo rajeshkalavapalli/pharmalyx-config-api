@@ -193,7 +193,7 @@ exports.getVisits = async (actingUserId, query) => {
     const explained = await Explanations.forVisits(visits.map((visit) => visit.VisitId));
     return visits.map((visit) => {
         const explanation = explained[String(visit.VisitId).toLowerCase()] || null;
-        return { ...visit, ...VerifiedWork.describeReasons(visit.InvalidReasons), Explanation: explanation, CanExplain: Explanations.canExplain(visit, explanation, actingUserId) };
+        return { ...visit, ...VerifiedWork.describeReasons(visit.InvalidReasons, { forOwner: sameId(visit.UserId, actingUserId) }), Explanation: explanation, CanExplain: Explanations.canExplain(visit, explanation, actingUserId) };
     });
 };
 
@@ -217,7 +217,7 @@ exports.getVisitById = async (actingUserId, visitId) => {
 
     const explanation = (await Explanations.forVisits([visit.VisitId]))[String(visit.VisitId).toLowerCase()] || null;
 
-    return { ...visit, ...VerifiedWork.describeReasons(visit.InvalidReasons), Items: items, Explanation: explanation, CanExplain: Explanations.canExplain(visit, explanation, actingUserId) };
+    return { ...visit, ...VerifiedWork.describeReasons(visit.InvalidReasons, { forOwner: sameId(visit.UserId, actingUserId) }), Items: items, Explanation: explanation, CanExplain: Explanations.canExplain(visit, explanation, actingUserId) };
 };
 
 exports.getFollowUps = async (actingUserId, userId) => {
@@ -461,9 +461,10 @@ exports.createVisit = async (actingUserId, payload) => {
         DeviationId: deviationId,
         deviationCreated: Boolean(deviation),
         geofence: { status: gps.columns.GeofenceStatus, distance: gps.columns.DistanceFromClinicM },
-        gpsFlags: gps.flags.map((item) => ({ type: item.FlagType, severity: item.Severity, details: item.Details })),
+        // The MR who just checked in gets a neutral line; the alert details go to their managers.
+        gpsFlags: gps.flags.length ? [{ type: 'REVIEW', severity: 'LOW', details: 'Your manager will take a quick look at this visit.' }] : [],
         validity: work.decision.validity,
-        ...VerifiedWork.describeReasons(work.columns.InvalidReasons),
+        ...VerifiedWork.describeReasons(work.columns.InvalidReasons, { forOwner: true }),
         dwellSeconds: work.decision.dwellSeconds,
     };
 };

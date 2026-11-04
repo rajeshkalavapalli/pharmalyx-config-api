@@ -385,7 +385,10 @@ exports.useCheckInQuery = (checkInId, visitId) => DA.useCheckInQuery({ CheckInId
 exports.flagQueries = (flags, visitId) => flags.map((inputs) => DA.flagQuery({ ...inputs, VisitId: visitId }));
 
 // Reason codes -> readable text (for API responses).
-exports.describeReasons = (value) => {
+const textFor = (code, forOwner) => (forOwner && rules.OWNER_REASONS[code]) || rules.REASONS[code] || code;
+
+// forOwner: the visit's own MR is reading (see rules.OWNER_REASONS).
+exports.describeReasons = (value, { forOwner = false } = {}) => {
     let parsed = null;
     try {
         parsed = value ? JSON.parse(value) : null;
@@ -395,8 +398,8 @@ exports.describeReasons = (value) => {
     const reasons = parsed?.reasons || [];
     const notes = parsed?.notes || [];
     return {
-        reasons: reasons.map((code) => ({ code, text: rules.REASONS[code] || code, hard: rules.HARD_REASONS.has(code) })),
-        notes: notes.map((code) => ({ code, text: rules.REASONS[code] || code })),
+        reasons: reasons.map((code) => ({ code, text: textFor(code, forOwner), hard: rules.HARD_REASONS.has(code) })),
+        notes: notes.map((code) => ({ code, text: textFor(code, forOwner) })),
     };
 };
 
@@ -488,7 +491,7 @@ exports.getToday = async (actingUserId) => {
         plan: rules.orderByTiming(inPatch),
         // Anyone else due inside the territory: no approval needed to visit them.
         otherDue: rules.orderByTiming(due.filter((doctor) => !inPatch.includes(doctor))),
-        visits: visits.map((visit) => ({ ...visit, ...exports.describeReasons(visit.InvalidReasons), InvalidReasons: undefined })),
+        visits: visits.map((visit) => ({ ...visit, ...exports.describeReasons(visit.InvalidReasons, { forOwner: true }), InvalidReasons: undefined })),
         // Counted today (valid + needs a look), and how each result splits.
         validToday: visits.filter((visit) => rules.COUNTED.includes(visit.FinalValidity)).length,
         today: {

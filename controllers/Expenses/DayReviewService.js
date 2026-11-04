@@ -239,6 +239,19 @@ exports.holdsFor = async (userId, from, to, facts, price) => {
 // Is a day's amount held back from the claim? (on hold, or decided not payable)
 exports.isHeld = (review) => Boolean(review) && review.Status !== 'PAYABLE';
 
+// The employee's own view of a reviewed day: the status and the decisions, not the check details
+// (those are for the reporting line and head office). The employee can still add a note.
+const FOR_EMPLOYEE = {
+    HELD: 'This day is in a routine review. TA / DA for it is paid once the review is done. You can add a note for your manager.',
+    WITH_MANAGER: 'Your manager is reviewing this day.',
+    WITH_ADMIN: 'Head office is doing the final check for this day.',
+};
+exports.forEmployee = (review) =>
+    review && {
+        ...review,
+        Findings: FOR_EMPLOYEE[review.Status] ? [{ code: 'IN_REVIEW', text: FOR_EMPLOYEE[review.Status] }] : [],
+    };
+
 // Payable days from earlier months whose claim was already submitted: paid with this claim.
 exports.releasable = async (userId, month) => {
     try {
