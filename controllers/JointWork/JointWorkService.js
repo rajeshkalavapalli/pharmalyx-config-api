@@ -1,6 +1,7 @@
 const DA = require('./JointWorkDA');
 const UserDA = require('../Users/userDA');
 const { istDateKey } = require('../VerifiedWork/rules');
+const { notifyLater } = require('../../utils/push');
 const { generateUUID } = require('../../utils/commonUtils');
 const { fail, isGuid, optionalText, requireActingUser, sameId, toDateKey } = require('../../utils/access');
 
@@ -162,6 +163,11 @@ exports.request = async (actingUserId, payload = {}) => {
     await run(() =>
         DA.request(colleagues.map((ColleagueUserId) => ({ JointWorkId: generateUUID(), UserId: actingUserId, ColleagueUserId, WorkDate: workDate, RequestedBy: actingUserId, Now: now })))
     );
+    notifyLater(colleagues, {
+        title: 'Joint work request',
+        body: `A colleague asked you to work with them on ${workDate}. Confirm or decline.`,
+        data: { screen: 'JointWork' },
+    });
     return { message: colleagues.length === 1 ? 'Joint work request sent.' : `Joint work request sent to ${colleagues.length} colleagues.` };
 };
 
@@ -179,6 +185,11 @@ exports.respond = async (actingUserId, jointWorkId, payload = {}) => {
     const accept = payload.Accept === true;
     const note = optionalText(payload.Note, 300, 'Note');
     await run(() => DA.respond({ JointWorkId: row.JointWorkId, ColleagueUserId: actingUserId, Status: accept ? 'CONFIRMED' : 'DECLINED', Note: note, Now: new Date() }));
+    notifyLater([row.UserId], {
+        title: accept ? 'Joint work confirmed' : 'Joint work declined',
+        body: `${row.ColleagueName} ${accept ? 'confirmed' : 'declined'} joint work on ${row.WorkDate}.${!accept && note ? ` “${note}”` : ''}`,
+        data: { screen: 'JointWork' },
+    });
     return { message: accept ? `Joint work with ${row.UserName} on ${row.WorkDate} confirmed.` : 'Joint work request declined.' };
 };
 

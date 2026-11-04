@@ -5,7 +5,11 @@ const { generateUUID } = require('../../utils/commonUtils');
 const VerifiedWorkDA = require('../VerifiedWork/VerifiedWorkDA');
 const { loadSettings } = require('../VerifiedWork/territory');
 const JointPlan = require('./jointPlan');
+const { notifyLater } = require('../../utils/push');
 const { istDateKey } = require('../VerifiedWork/rules');
+
+const monthLabel = (monthStart) => new Date(`${String(monthStart).slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+const shortDate = (key) => new Date(`${String(key).slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 const AUTO_APPROVED = 'Inside the territory: saved without manager approval.';
 const SENT_FOR_APPROVAL = 'Sent to your manager for approval.';
@@ -471,7 +475,25 @@ exports.saveTourPlan = async (actingUserId, tourPlanPayload) => {
     const result = await saveDays({ actingUserId, monthStart, submit, details, statuses, existing, now, approval });
 
     // A saved plan (not a draft) makes its joint work days real: confirmed and locked for the team members.
-    if (result.Status !== 'DRAFT') await JointPlan.sync(actingUserId, monthStart, jointDays);
+    if (result.Status !== 'DRAFT') {
+        await JointPlan.sync(actingUserId, monthStart, jointDays);
+        const byMember = new Map();
+        jointDays.forEach((day) => byMember.set(String(day.UserId).toLowerCase(), [...(byMember.get(String(day.UserId).toLowerCase()) || []), day.WorkDate]));
+        byMember.forEach((dates, memberId) =>
+            notifyLater([memberId], {
+                title: 'Joint work planned',
+                body: `${ownerRow?.Name || 'Your senior'} will work with you on ${dates.sort().map(shortDate).join(', ')}.`,
+                data: { screen: 'TourPlan', params: { month: monthStart.slice(0, 7) } },
+            })
+        );
+    }
+    if (result.Status === 'SUBMITTED' && ownerRow?.ManagerId) {
+        notifyLater([ownerRow.ManagerId], {
+            title: 'Tour plan to approve',
+            body: `${ownerRow.Name || 'A team member'} sent the ${monthLabel(monthStart)} tour plan for approval.`,
+            data: { screen: 'Approvals' },
+        });
+    }
     return jointDays.length && result.Status !== 'DRAFT'
         ? { ...result, message: `${result.message} Your team members can see the joint work days.` }
         : result;
@@ -600,6 +622,14 @@ const decide = async (actingUserId, tourPlanId, outcome, remarks) => {
     } catch (err) {
         throw mapDbError(err);
     }
+
+    notifyLater([plan.UserId], {
+        title: outcome === 'APPROVED' ? 'Tour plan approved' : 'Tour plan returned',
+        body: outcome === 'APPROVED'
+            ? `Your ${monthLabel(plan.PlanMonth)} tour plan was approved.`
+            : `Your ${monthLabel(plan.PlanMonth)} tour plan needs changes: ${reviewRemarks}`.slice(0, 300),
+        data: { screen: 'TourPlan', params: { month: String(plan.PlanMonth).slice(0, 7) } },
+    });
 
     return { TourPlanId: plan.TourPlanId, Status: outcome };
 };

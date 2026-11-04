@@ -1,4 +1,5 @@
 const DcrDA = require('./DcrDA');
+const { notifyLater } = require('../../utils/push');
 
 const { generateUUID } = require('../../utils/commonUtils');
 
@@ -364,6 +365,12 @@ exports.reviewDcr = async (actingUserId, dcrId, outcome, remarks) => {
     } catch (err) {
         throw mapDbError(err);
     }
+
+    notifyLater([dcr.UserId], {
+        title: outcome === 'RETURNED' ? 'DCR returned' : 'DCR approved',
+        body: outcome === 'RETURNED' ? `Your DCR for ${dcr.ReportDate} needs changes: ${reviewRemarks}`.slice(0, 300) : `Your DCR for ${dcr.ReportDate} was approved.`,
+        data: { screen: 'Dcr' },
+    });
 
     return { DcrId: dcr.DcrId, Status: outcome };
 };

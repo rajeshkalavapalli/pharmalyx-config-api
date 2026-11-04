@@ -304,3 +304,10 @@
 
 - Uploaded files (doctor signboard photos, order slips, delivery receipts, spend documents) can be stored in the database: set `FILE_STORE=db` (table dbo.FileBlobs, run the SQL in SSMS). Hosts without a lasting disk (Render) keep the files across deploys
 - Without the table, or without `FILE_STORE=db`, files stay in the uploads folder as before; files saved in the folder earlier still open after the switch
+
+
+### V 1.0.67
+
+- Phone notifications through the Expo push service (utils/push.js, table dbo.PushTokens, run the SQL in SSMS): POST / DELETE /app/push/token registers the signed-in person's phone
+- Sent for: tour plan sent for approval (to the manager), approved / returned (to the owner), joint work days planned by a senior (to the team member), joint work request and answer, leave applied (to the manager) and decided (to the employee), DCR approved / returned, TA / DA day decided by the manager or head office
+- Notifications never block or fail the action; tokens Expo reports as not registered are removed
