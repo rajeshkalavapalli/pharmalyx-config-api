@@ -319,3 +319,10 @@
 - Admin create doctor accepts the phone's column-name keys (DoctorName, TerritoryId, ...) as well as the web form's camelCase keys; create / update fill a missing country / state from the territory
 - Pharmacy and stockist create / update: clear 400 message when owner, phone, address, territory or area is missing, country / state from the territory when blank, optional columns default to empty; their errors now return a readable message instead of "Internal Server Error"
 - Data import: doctors, chemists and stockists use the row's State column first, then the territory's; a new row whose territory has no state is marked as an error instead of failing the whole import
+
+
+### V 1.0.69
+
+- Samples / gifts: an admin (masters.edit) can now issue stock to anyone in the company, not only the reporting manager; nobody can issue to themselves
+- GET /app/stock/recipients: who the signed-in person can issue to (direct reports, or everyone active for an admin)
+- Stock balances / history: an admin can open any person's stock; managers can open anyone in their team (all levels below)

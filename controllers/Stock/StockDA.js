@@ -11,6 +11,8 @@ exports.getVisitItems = (VisitId) => customQuery(sql.GET_VISIT_ITEMS(), { VisitI
 exports.itemExists = async (ItemType, ItemId) =>
     (await customQuery(sql.ITEM_EXISTS(), { ItemType, ItemId })).length > 0;
 
+exports.issueRecipients = (ActingUserId, Admin) => customQuery(sql.ISSUE_RECIPIENTS(), { ActingUserId, Admin });
+
 exports.addEntry = (inputs) => runInTransaction([{ sqlQuery: sql.ADD_ENTRY(), inputs }]);
 
 exports.removeEntry = (inputs) => runInTransaction([{ sqlQuery: sql.REMOVE_ENTRY(), inputs }]);
