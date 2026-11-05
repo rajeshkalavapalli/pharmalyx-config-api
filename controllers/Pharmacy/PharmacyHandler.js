@@ -10,7 +10,7 @@
 
     }catch(err){
         console.error("Error creating pharmacy:", err);
-        res.status(500).json({ error: "Internal Server Error" });
+        res.status(err.status || 500).json({ message: err.status ? err.message : "Failed to create pharmacy.", error: err.message });
     }
  }
 
@@ -21,7 +21,7 @@
 
     }catch(err){
         console.error("Error getting pharmacies:", err);
-        res.status(500).json({ error: "Internal Server Error" });
+        res.status(err.status || 500).json({ message: err.status ? err.message : "Failed to load pharmacies.", error: err.message });
     }
  }
 
@@ -33,7 +33,7 @@
 
     }catch(err){
         console.error("Error getting pharmacy by ID:", err);
-        res.status(500).json({ error: "Internal Server Error" });
+        res.status(err.status || 500).json({ message: err.status ? err.message : "Failed to load pharmacy.", error: err.message });
     }
  }
 
@@ -46,7 +46,7 @@
 
     }catch(err){
         console.error("Error updating pharmacy:", err);
-        res.status(500).json({ error: "Internal Server Error" });
+        res.status(err.status || 500).json({ message: err.status ? err.message : "Failed to update pharmacy.", error: err.message });
     }
  }
 
@@ -58,6 +58,6 @@
 
     }catch(err){
         console.error("Error deleting pharmacy:", err);
-        res.status(500).json({ error: "Internal Server Error" });
+        res.status(err.status || 500).json({ message: err.status ? err.message : "Failed to delete pharmacy.", error: err.message });
     }
  }

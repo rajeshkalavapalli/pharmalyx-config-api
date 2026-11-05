@@ -3,7 +3,16 @@ const { actingUser } = require('../../utils/http')
 
 exports.createDoctor = async (req, res) => {
     try {
-        const reqData = req.body;
+        // The web form sends camelCase (doctorName); the phone's admin screen sends column names (DoctorName).
+        const body = req.body || {};
+        const reqData = { ...body };
+        [
+            ['doctorName', 'DoctorName'], ['qualification', 'Qualification'], ['speciality', 'Speciality'], ['hospitalName', 'HospitalName'],
+            ['clinicAddress', 'ClinicAddress'], ['mobileNumber', 'MobileNumber'], ['emailId', 'EmailId'],
+            ['country', 'CountryId'], ['state', 'StateId'], ['territory', 'TerritoryId'], ['area', 'AreaId'],
+        ].forEach(([camel, column]) => {
+            if (reqData[camel] == null || reqData[camel] === '') reqData[camel] = body[column] ?? reqData[camel];
+        });
         if (!reqData.doctorName || !reqData.qualification || !reqData.speciality || !reqData.hospitalName) {
             return res.status(400).json({
                 message: "Doctor name, qualification, speciality and hospital name are required"

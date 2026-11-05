@@ -311,3 +311,11 @@
 - Phone notifications through the Expo push service (utils/push.js, table dbo.PushTokens, run the SQL in SSMS): POST / DELETE /app/push/token registers the signed-in person's phone
 - Sent for: tour plan sent for approval (to the manager), approved / returned (to the owner), joint work days planned by a senior (to the team member), joint work request and answer, leave applied (to the manager) and decided (to the employee), DCR approved / returned, TA / DA day decided by the manager or head office
 - Notifications never block or fail the action; tokens Expo reports as not registered are removed
+
+
+### V 1.0.68
+
+- Fixed "Failed to send the new doctor": the phone's Add doctor form has no country / state (NOT NULL on dbo.Doctor), so they are now taken from the territory's state (utils/placeOfTerritory.js); same for a rejected new doctor sent again
+- Admin create doctor accepts the phone's column-name keys (DoctorName, TerritoryId, ...) as well as the web form's camelCase keys; create / update fill a missing country / state from the territory
+- Pharmacy and stockist create / update: clear 400 message when owner, phone, address, territory or area is missing, country / state from the territory when blank, optional columns default to empty; their errors now return a readable message instead of "Internal Server Error"
+- Data import: doctors, chemists and stockists use the row's State column first, then the territory's; a new row whose territory has no state is marked as an error instead of failing the whole import

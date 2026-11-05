@@ -1,11 +1,12 @@
 const PharmacyDA = require('./PharmacyDA');
 const {generateUUID} = require('../../utils/commonUtils');
+const { checkOutlet } = require('../../utils/placeOfTerritory');
 
 exports.CreatePharmacy = async (pharmacyPayload) => {
     try {
         const PharmacyId = generateUUID();
         const pharmacyData = {
-            ...pharmacyPayload,
+            ...(await checkOutlet(pharmacyPayload || {}, 'PharmacyName', 'Pharmacy name')),
             PharmacyId: PharmacyId,
             CreatedOn: new Date(),
             ModifiedOn: null,
@@ -41,7 +42,7 @@ exports.GetPharmacyById = async (pharmacyId) => {
 exports.UpdatePharmacy = async (pharmacyId, pharmacyPayload) => {
     try {
         const pharmacyData = {
-            ...pharmacyPayload,
+            ...(await checkOutlet(pharmacyPayload || {}, 'PharmacyName', 'Pharmacy name')),
             ModifiedOn: new Date(),
         }; 
         const updatedPharmacy = await PharmacyDA.UpdatePharmacy(pharmacyId, pharmacyData);

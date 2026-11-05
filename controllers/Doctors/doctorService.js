@@ -3,6 +3,7 @@ const DoctorDA = require('./DoctorDA')
 const { writeAudit } = require('../../utils/audit');
 const { customQuery } = require('../../utils/dbFunctions');
 const { normalizeName } = require('../../utils/doctorMatching');
+const { placeOfTerritory } = require('../../utils/placeOfTerritory');
 
 // Keeps the duplicate-search key in step with the name (column added by the verification schema).
 const syncNormalizedName = (DoctorId, DoctorName) =>
@@ -108,6 +109,8 @@ exports.createDoctor = async (reqData, actingUserId) => {
             CreatedOn: now,
             ModifiedOn: now,
         };
+        if (!newDoctor.TerritoryId || !newDoctor.AreaId) throw fail(400, 'Choose the territory and area.');
+        Object.assign(newDoctor, await placeOfTerritory(newDoctor));
 
         await DoctorDA.createDoctor(newDoctor);
         await syncNormalizedName(doctorId, newDoctor.DoctorName);
@@ -175,6 +178,7 @@ exports.updateDoctor = async (doctorId, updatedDoctor, actingUserId) => {
             IsActive: updatedDoctor.IsActive === 'No' ? 'No' : 'Yes',
             ModifiedOn: new Date()
         }
+        if (DoctorUpdate.TerritoryId && (!DoctorUpdate.CountryId || !DoctorUpdate.StateId)) Object.assign(DoctorUpdate, await placeOfTerritory(DoctorUpdate));
         const before = (await DoctorDA.getDoctorById(doctorId))[0] || null;
         const result = await DoctorDA.updateDoctor(doctorId, DoctorUpdate);
         if (DoctorUpdate.DoctorName) await syncNormalizedName(doctorId, DoctorUpdate.DoctorName);
