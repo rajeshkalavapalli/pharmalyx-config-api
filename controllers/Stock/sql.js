@@ -9,6 +9,20 @@ const ITEM_JOINS = `
 `;
 
 module.exports = {
+    // Who the acting user can issue stock to: direct reports, or (admin) every active person in the company.
+    ISSUE_RECIPIENTS: () => {
+        return `
+            SELECT u.UserId, ${displayName('u')} AS Name, d.SystemLovDetailName AS DesignationName, ${displayName('m')} AS ManagerName
+            FROM Users u
+            LEFT JOIN SystemLovDetails d ON d.SystemLovDetailId = u.DesignationId
+            LEFT JOIN Users m ON m.UserId = u.ManagerId
+            WHERE ISNULL(u.IsActive, 1) = 1
+              AND u.UserId <> @ActingUserId
+              AND (@Admin = 1 OR u.ManagerId = @ActingUserId)
+            ORDER BY Name
+        `;
+    },
+
     // Current holding per item, with this month's movement.
     GET_BALANCES: () => {
         return `

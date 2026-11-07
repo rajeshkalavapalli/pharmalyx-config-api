@@ -1,6 +1,7 @@
-// Whose business: the user's own (scope self) or their direct reports' (scope team).
+// Whose business: the user's own (scope self) or their team's (scope team: everyone below them,
+// or the whole company for head office; @TeamIds from reportScope.teamIdsJson).
 const OWNER = (alias) => `
-    ((@Scope = 'self' AND ${alias}.UserId = @UserId) OR (@Scope = 'team' AND u.ManagerId = @UserId))
+    ((@Scope = 'self' AND ${alias}.UserId = @UserId) OR (@Scope = 'team' AND u.UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds))))
 `;
 
 // Cancelled orders never count; only submitted or approved statements count.

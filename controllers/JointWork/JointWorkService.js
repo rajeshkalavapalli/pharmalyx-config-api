@@ -1,6 +1,7 @@
 const DA = require('./JointWorkDA');
 const UserDA = require('../Users/userDA');
 const { istDateKey } = require('../VerifiedWork/rules');
+const { notifyLater } = require('../../utils/push');
 const { generateUUID } = require('../../utils/commonUtils');
 const { fail, isGuid, optionalText, requireActingUser, sameId, toDateKey } = require('../../utils/access');
 
@@ -31,13 +32,18 @@ const run = async (work) => {
     }
 };
 
-const shape = (row, actingUserId) => ({
-    ...row,
-    mine: sameId(row.UserId, actingUserId), // I am the field person
-    canRespond: sameId(row.ColleagueUserId, actingUserId) && row.WorkDate >= addDays(istDateKey(), -PAST_DAYS),
-    canGiveFeedback: sameId(row.ColleagueUserId, actingUserId) && row.Status === 'CONFIRMED' && row.WorkDate <= istDateKey(),
-    canCancel: sameId(row.UserId, actingUserId) && !row.JointCalls,
-});
+// planned: a senior planned the day in their tour plan (no answer needed; changed from that plan only).
+const shape = (row, actingUserId) => {
+    const planned = sameId(row.RequestedBy, row.ColleagueUserId);
+    return {
+        ...row,
+        planned,
+        mine: sameId(row.UserId, actingUserId), // I am the field person
+        canRespond: !planned && sameId(row.ColleagueUserId, actingUserId) && row.WorkDate >= addDays(istDateKey(), -PAST_DAYS),
+        canGiveFeedback: sameId(row.ColleagueUserId, actingUserId) && row.Status === 'CONFIRMED' && row.WorkDate <= istDateKey(),
+        canCancel: !planned && sameId(row.UserId, actingUserId) && !row.JointCalls,
+    };
+};
 
 const monthRange = (month) => {
     const match = /^(\d{4})-(\d{2})/.exec(String(month || istDateKey()));
@@ -69,14 +75,65 @@ exports.list = async (actingUserId, query = {}) => {
     };
 };
 
-// Requests waiting for my answer (for the alerts badge). Zero until the tables exist.
+// For the alerts: requests waiting for my answer (badge), my plan days to replan because of leave,
+// and the next week's days a senior planned with me. Empty until the tables exist.
 exports.pendingCount = async (actingUserId) => {
     requireActingUser(actingUserId);
+    const today = istDateKey();
     try {
-        return { pending: await DA.pendingFor(actingUserId, addDays(istDateKey(), -PAST_DAYS)) };
+        const [pending, replan, upcoming] = await Promise.all([
+            DA.pendingFor(actingUserId, addDays(today, -PAST_DAYS)),
+            DA.replanFor(actingUserId, today),
+            DA.upcomingFor(actingUserId, today, addDays(today, 7)),
+        ]);
+        const brief = (row) => ({ JointWorkId: row.JointWorkId, WorkDate: row.WorkDate, UserName: row.UserName, ColleagueName: row.ColleagueName, ResponseNote: row.ResponseNote });
+        return { pending, replan: replan.map(brief), upcoming: upcoming.map(brief) };
     } catch (error) {
-        if (notReady(error)) return { pending: 0 };
+        if (notReady(error)) return { pending: 0, replan: [], upcoming: [] };
         throw error;
+    }
+};
+
+// Today's joint work for My Day (either side). Empty until the tables exist.
+exports.todayFor = async (userId) => {
+    try {
+        const rows = await DA.today(userId, istDateKey());
+        return rows.map((row) => {
+            const field = sameId(row.UserId, userId);
+            return {
+                JointWorkId: row.JointWorkId,
+                Status: row.Status,
+                role: field ? 'field' : 'colleague', // field: I am the field person; colleague: I join them
+                withName: field ? row.ColleagueName : row.UserName,
+                TerritoryName: row.TerritoryName,
+                AreaName: row.AreaName,
+            };
+        });
+    } catch (error) {
+        if (notReady(error)) return [];
+        throw error;
+    }
+};
+
+// Leave applied: confirmed joint work days it touches (to warn). Leave approved: those days are cancelled,
+// and the senior who planned them sees a "replan" alert. Nothing happens until the tables exist.
+exports.leaveClashes = async (userId, from, to) => {
+    try {
+        return (await DA.leaveClashes(userId, from, to)).map((row) => ({
+            WorkDate: row.WorkDate,
+            withName: sameId(row.UserId, userId) ? row.ColleagueName : row.UserName,
+        }));
+    } catch (error) {
+        if (notReady(error)) return [];
+        throw error;
+    }
+};
+
+exports.cancelForLeave = async (userId, userName, from, to) => {
+    try {
+        await DA.cancelForLeave({ UserId: userId, From: from, To: to, Note: `Cancelled: ${userName || 'on'} leave`.slice(0, 300), Now: new Date() });
+    } catch (error) {
+        if (!notReady(error)) throw error;
     }
 };
 
@@ -106,6 +163,11 @@ exports.request = async (actingUserId, payload = {}) => {
     await run(() =>
         DA.request(colleagues.map((ColleagueUserId) => ({ JointWorkId: generateUUID(), UserId: actingUserId, ColleagueUserId, WorkDate: workDate, RequestedBy: actingUserId, Now: now })))
     );
+    notifyLater(colleagues, {
+        title: 'Joint work request',
+        body: `A colleague asked you to work with them on ${workDate}. Confirm or decline.`,
+        data: { screen: 'JointWork' },
+    });
     return { message: colleagues.length === 1 ? 'Joint work request sent.' : `Joint work request sent to ${colleagues.length} colleagues.` };
 };
 
@@ -123,6 +185,11 @@ exports.respond = async (actingUserId, jointWorkId, payload = {}) => {
     const accept = payload.Accept === true;
     const note = optionalText(payload.Note, 300, 'Note');
     await run(() => DA.respond({ JointWorkId: row.JointWorkId, ColleagueUserId: actingUserId, Status: accept ? 'CONFIRMED' : 'DECLINED', Note: note, Now: new Date() }));
+    notifyLater([row.UserId], {
+        title: accept ? 'Joint work confirmed' : 'Joint work declined',
+        body: `${row.ColleagueName} ${accept ? 'confirmed' : 'declined'} joint work on ${row.WorkDate}.${!accept && note ? ` “${note}”` : ''}`,
+        data: { screen: 'JointWork' },
+    });
     return { message: accept ? `Joint work with ${row.UserName} on ${row.WorkDate} confirmed.` : 'Joint work request declined.' };
 };
 

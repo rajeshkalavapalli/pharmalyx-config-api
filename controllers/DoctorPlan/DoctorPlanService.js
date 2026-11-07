@@ -1,3 +1,4 @@
+const { canViewUser } = require('../../utils/access');
 const DoctorPlanDA = require('./DoctorPlanDA');
 
 const { generateUUID } = require('../../utils/commonUtils');
@@ -193,7 +194,7 @@ exports.getPlanById = async (actingUserId, planId) => {
     const plan = await DoctorPlanDA.getPlanById(planId);
     if (!plan) throw fail(404, 'Plan not found.');
 
-    if (!sameId(plan.UserId, actingUserId) && !sameId(plan.ManagerId, actingUserId)) {
+    if (!sameId(plan.UserId, actingUserId) && !sameId(plan.ManagerId, actingUserId) && !(await canViewUser(actingUserId, plan.UserId))) {
         throw fail(403, 'Only the MR or their manager can open this plan.');
     }
 

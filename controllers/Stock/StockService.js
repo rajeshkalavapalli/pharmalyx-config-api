@@ -9,8 +9,8 @@ const {
     isGuid,
     optionalText,
     requireActingUser,
-    requireManagerOf,
     resolveViewUser,
+    sameId,
     todayKey,
     toDateKey,
 } = require('../../utils/access');
@@ -49,6 +49,35 @@ const requireItem = async (itemType, itemId) => {
 
 const mapDbError = (error) => (error.number === 50021 ? fail(409, error.message) : error);
 
+// Admin (masters.edit) runs the sample / gift store for the whole company.
+const isAdmin = async (userId) => (await getPermissions(userId)).has('masters.edit');
+
+// Whose stock may be viewed: own or team (any level below); an admin sees anyone in the company.
+const stockViewUser = async (actingUserId, userId) => {
+    try {
+        return await resolveViewUser(actingUserId, userId, 'stock');
+    } catch (error) {
+        if (error.status !== 403) throw error;
+        if (await isAdmin(actingUserId)) {
+            if (!(await VerifiedWorkDA.getUser(userId))) throw fail(404, 'User not found.');
+            return userId;
+        }
+        return resolveTarget(actingUserId, userId);
+    }
+};
+
+// Issuing: the person's reporting manager, or an admin. Nobody issues to themselves.
+const requireIssuer = async (actingUserId, targetUserId) => {
+    requireActingUser(actingUserId);
+    if (!isGuid(targetUserId)) throw fail(400, 'Choose who gets the stock.');
+    if (sameId(targetUserId, actingUserId)) throw fail(403, "You can't issue stock to yourself.");
+
+    const target = await VerifiedWorkDA.getUser(targetUserId);
+    if (!target) throw fail(404, 'User not found.');
+    if (sameId(target.ManagerId, actingUserId) || (await isAdmin(actingUserId))) return;
+    throw fail(403, 'Only the reporting manager or an admin can issue stock to this user.');
+};
+
 const monthStart = () => `${todayKey().slice(0, 8)}01`;
 
 const number = (value) => Number(value) || 0;
@@ -58,7 +87,7 @@ const number = (value) => Number(value) || 0;
 // =========================================================
 
 exports.getBalances = async (actingUserId, query) => {
-    const userId = await resolveViewUser(actingUserId, query.userId, 'stock');
+    const userId = await stockViewUser(actingUserId, query.userId);
     const rows = await StockDA.getBalances(userId, toItemType(query.itemType, false), monthStart());
 
     return {
@@ -73,7 +102,7 @@ exports.getBalances = async (actingUserId, query) => {
 };
 
 exports.getLedger = async (actingUserId, query) => {
-    const userId = await resolveViewUser(actingUserId, query.userId, 'stock');
+    const userId = await stockViewUser(actingUserId, query.userId);
     const today = todayKey();
 
     const ledger = await StockDA.getLedger({
@@ -90,10 +119,14 @@ exports.getLedger = async (actingUserId, query) => {
 // WRITES
 // =========================================================
 
-// A manager hands stock to a direct report.
-exports.issueStock = async (actingUserId, payload) => {
+exports.getRecipients = async (actingUserId) => {
     requireActingUser(actingUserId);
-    await requireManagerOf(actingUserId, payload.UserId, 'issue stock to this user');
+    return { users: await StockDA.issueRecipients(actingUserId, (await isAdmin(actingUserId)) ? 1 : 0) };
+};
+
+// A manager hands stock to a direct report; an admin can issue to anyone in the company.
+exports.issueStock = async (actingUserId, payload) => {
+    await requireIssuer(actingUserId, payload.UserId);
 
     const itemType = toItemType(payload.ItemType);
     await requireItem(itemType, payload.ItemId);

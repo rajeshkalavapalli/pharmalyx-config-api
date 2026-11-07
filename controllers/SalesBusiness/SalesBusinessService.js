@@ -1,3 +1,4 @@
+const { teamIdsJson } = require('../../utils/reportScope');
 const SalesBusinessDA = require('./SalesBusinessDA');
 
 const { requireActingUser, todayKey, toMonthStart } = require('../../utils/access');
@@ -58,7 +59,8 @@ exports.getBusiness = async (actingUserId, query) => {
     const scope = query.scope === 'team' ? 'team' : 'self';
     const monthStart = toMonthStart(query.month || todayKey().slice(0, 7));
     const fromDate = shiftMonth(monthStart, -(TREND_MONTHS - 1));
-    const inputs = { UserId: actingUserId, Scope: scope, FromDate: fromDate, MonthStart: monthStart, ToDate: monthEnd(monthStart) };
+    const TeamIds = await teamIdsJson(actingUserId);
+    const inputs = { UserId: actingUserId, Scope: scope, TeamIds, FromDate: fromDate, MonthStart: monthStart, ToDate: monthEnd(monthStart) };
 
     const [pobTrend, secondaryTrend, pobProducts, secondaryProducts, pobStockists, secondaryStockists, customers, hasTeam] = await Promise.all([
         SalesBusinessDA.getPobTrend(inputs),
@@ -68,7 +70,7 @@ exports.getBusiness = async (actingUserId, query) => {
         SalesBusinessDA.getPobStockists(inputs),
         SalesBusinessDA.getSecondaryStockists(inputs),
         SalesBusinessDA.getTopCustomers(inputs),
-        SalesBusinessDA.hasTeam(actingUserId),
+        JSON.parse(TeamIds).length > 0,
     ]);
 
     const pobByMonth = new Map(pobTrend.map((row) => [row.Month, row]));

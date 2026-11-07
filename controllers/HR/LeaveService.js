@@ -1,6 +1,9 @@
 const HRDA = require('./HRDA');
 
 const { generateUUID } = require('../../utils/commonUtils');
+const JointWork = require('../JointWork/JointWorkService');
+const { notifyLater } = require('../../utils/push');
+const { customQuery } = require('../../utils/dbFunctions');
 const { resolveScope } = require('../../utils/reportScope');
 const { fail, isGuid, optionalText, requireActingUser, sameId, toDateKey, todayKey } = require('../../utils/access');
 
@@ -110,7 +113,21 @@ exports.apply = async (actingUserId, payload) => {
 
     await HRDA.createLeave({ LeaveId: generateUUID(), UserId: actingUserId, LeaveTypeId: type.LeaveTypeId, FromDate: from, ToDate: to, HalfDay: halfDay ? 1 : 0, Days: days, Reason: reason, Now: new Date() });
 
-    return { message: `${type.Name} for ${days} day(s) sent to your manager.` };
+    // Leave is allowed on a planned joint work day (it can be urgent); the person is told, and the
+    // joint day is cancelled when the leave is approved.
+    const clashes = await JointWork.leaveClashes(actingUserId, from, to);
+    const note = clashes.length
+        ? ` Joint work was planned on ${clashes.map((c) => `${c.WorkDate} (with ${c.withName})`).join(', ')}; it will be cancelled if the leave is approved.`
+        : '';
+    const [me] = await customQuery("SELECT ManagerId, COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(FirstName, ' ', LastName))), ''), UserName) AS Name FROM Users WHERE UserId = @UserId", { UserId: actingUserId });
+    if (me?.ManagerId) {
+        notifyLater([me.ManagerId], {
+            title: 'Leave to approve',
+            body: `${me.Name} applied for ${type.Name}: ${from}${to !== from ? ` to ${to}` : ''}.${clashes.length ? ' A joint work day is in this leave.' : ''}`,
+            data: { screen: 'Approvals' },
+        });
+    }
+    return { message: `${type.Name} for ${days} day(s) sent to your manager.${note}`, jointWorkClashes: clashes };
 };
 
 exports.cancel = async (actingUserId, leaveId) => {
@@ -144,6 +161,14 @@ exports.review = async (actingUserId, leaveId, approve, remarks) => {
 
     const changed = await HRDA.setLeaveStatus({ LeaveId: leaveId, FromStatus: 'PENDING', Status: approve ? 'APPROVED' : 'REJECTED', ReviewedBy: actingUserId, Remarks: note, Now: new Date() });
     if (!changed) throw fail(409, 'This leave was updated meanwhile. Refresh and try again.');
+
+    // Approved leave cancels the person's joint work days in it (the planner sees a "replan" alert).
+    if (approve) await JointWork.cancelForLeave(leave.UserId, leave.UserName, String(leave.FromDate).slice(0, 10), String(leave.ToDate).slice(0, 10));
+    notifyLater([leave.UserId], {
+        title: approve ? 'Leave approved' : 'Leave not approved',
+        body: `${leave.LeaveName || 'Leave'} ${leave.FromDate}${leave.ToDate !== leave.FromDate ? ` to ${leave.ToDate}` : ''}${approve ? ' is approved.' : ` was rejected: ${note}`}`.slice(0, 300),
+        data: { screen: 'Me' },
+    });
 
     return { message: `${leave.UserName}'s leave ${approve ? 'approved' : 'rejected'}.` };
 };

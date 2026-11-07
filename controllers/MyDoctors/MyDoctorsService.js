@@ -1,3 +1,5 @@
+const { getScopeUsers } = require('../../utils/reportScope');
+const { canViewUser } = require('../../utils/access');
 const MyDoctorsDA = require('./MyDoctorsDA');
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -20,9 +22,12 @@ const requireActingUser = (actingUserId) => {
 exports.getTeam = async (actingUserId) => {
     requireActingUser(actingUserId);
 
-    const rows = await MyDoctorsDA.getTeam(actingUserId);
+    // Yourself first, then everyone you can see: your team at all levels, or the whole company for head office.
+    const { users } = await getScopeUsers(actingUserId);
 
-    return rows.map((row) => ({ ...row, IsSelf: Boolean(row.IsSelf) }));
+    return users
+        .filter((row) => row.IsActive !== false || row.IsSelf)
+        .map((row) => ({ UserId: row.UserId, Name: row.Name, DesignationName: row.DesignationName, ManagerName: row.ManagerName, IsSelf: Boolean(row.IsSelf) }));
 };
 
 // A user sees their own doctors; a manager can also see a direct report's.
@@ -36,9 +41,7 @@ exports.getMyDoctors = async (actingUserId, userId) => {
     }
 
     if (!sameId(targetUserId, actingUserId)) {
-        const target = await MyDoctorsDA.getUser(targetUserId);
-
-        if (!target || !sameId(target.ManagerId, actingUserId)) {
+        if (!(await canViewUser(actingUserId, targetUserId))) {
             throw fail(403, "You can only view your own or your team's doctors.");
         }
     }

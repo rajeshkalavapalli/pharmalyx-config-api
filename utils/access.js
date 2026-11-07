@@ -23,7 +23,17 @@ const requireActingUser = (actingUserId) => {
 const getUser = async (UserId) =>
     (await customQuery('SELECT UserId, ManagerId FROM Users WHERE UserId = @UserId', { UserId }))[0] || null;
 
-// The user whose data is requested: yourself, or a direct report if you manage them.
+// May the acting user SEE this person's data? Yourself; anyone below you in the reporting
+// hierarchy (any depth); or anyone at all with head-office view (reports.viewall / admin).
+// Approving stays with the reporting manager: this is only for viewing.
+const canViewUser = async (actingUserId, targetUserId) => {
+    if (!targetUserId || !isGuid(targetUserId)) return false;
+    if (sameId(targetUserId, actingUserId)) return true;
+    const { isInScope } = require('./reportScope'); // lazy: reportScope requires this file
+    return isInScope(actingUserId, targetUserId);
+};
+
+// The user whose data is requested: yourself, or someone you can see (see canViewUser).
 const resolveViewUser = async (actingUserId, userId, noun = 'data') => {
     requireActingUser(actingUserId);
 
@@ -31,12 +41,8 @@ const resolveViewUser = async (actingUserId, userId, noun = 'data') => {
 
     if (!isGuid(targetUserId)) throw fail(400, 'User is invalid.');
 
-    if (!sameId(targetUserId, actingUserId)) {
-        const target = await getUser(targetUserId);
-
-        if (!target || !sameId(target.ManagerId, actingUserId)) {
-            throw fail(403, `You can only view your own or your team's ${noun}.`);
-        }
+    if (!(await canViewUser(actingUserId, targetUserId))) {
+        throw fail(403, `You can only view your own or your team's ${noun}.`);
     }
 
     return targetUserId;
@@ -94,6 +100,7 @@ module.exports = {
     isGuid,
     requireActingUser,
     resolveViewUser,
+    canViewUser,
     requireManagerOf,
     todayKey,
     toDateKey,

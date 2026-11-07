@@ -1,10 +1,11 @@
 const StockistDA = require('./StockistDA');
 const {generateUUID} = require('../../utils/commonUtils');
+const { checkOutlet } = require('../../utils/placeOfTerritory');
 
-exports.createStockist = (data) => {
-    const Data = { 
+exports.createStockist = async (data) => {
+    const Data = {
         StockistId: generateUUID(),
-        ...data ,
+        ...(await checkOutlet(data || {}, 'StockistName', 'Name')),
         CreatedOn: new Date(),
         ModifiedOn: new Date(),
     };
@@ -22,9 +23,9 @@ exports.getStockistById = (id) => {
     return StockistDA.getStockistById(Data);
 };
 
-exports.updateStockist = (id, data) => {
+exports.updateStockist = async (id, data) => {
     const Data = {
-        ...data,
+        ...(await checkOutlet(data || {}, 'StockistName', 'Name')),
         StockistId: id,
         ModifiedOn: new Date(),
     };

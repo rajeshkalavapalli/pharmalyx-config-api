@@ -9,8 +9,9 @@ const { normalizeName } = require('../../utils/doctorMatching');
 
 const yesNo = (active) => (active === false ? 'No' : 'Yes');
 const idOf = (item) => item?.id ?? null;
-const stateOf = (v) => v.territory?.stateId ?? null;
-const countryOf = (v) => v.territory?.countryId ?? null;
+// The row's own State column first, else the territory's state.
+const stateOf = (v) => v.state?.id ?? v.territory?.stateId ?? null;
+const countryOf = (v) => (v.state?.id ? v.state.countryId : v.territory?.countryId) ?? null;
 const text = (value) => (value === undefined || value === '' ? null : value);
 // Doctor location columns are VARCHAR: write ids in upper case, as the doctor screens and SQL Server do.
 const idText = (id) => (id ? String(id).toUpperCase() : null);

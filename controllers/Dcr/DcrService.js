@@ -1,4 +1,6 @@
+const { canViewUser } = require('../../utils/access');
 const DcrDA = require('./DcrDA');
+const { notifyLater } = require('../../utils/push');
 
 const { generateUUID } = require('../../utils/commonUtils');
 
@@ -88,9 +90,7 @@ const resolveTarget = async (actingUserId, userId) => {
     const targetUserId = blank(userId) ? actingUserId : String(userId);
 
     if (!sameId(targetUserId, actingUserId)) {
-        const target = await DcrDA.getUser(targetUserId);
-
-        if (!target || !sameId(target.ManagerId, actingUserId)) {
+        if (!(await canViewUser(actingUserId, targetUserId))) {
             throw fail(403, "You can only view your own or your team's DCRs.");
         }
     }
@@ -364,6 +364,12 @@ exports.reviewDcr = async (actingUserId, dcrId, outcome, remarks) => {
     } catch (err) {
         throw mapDbError(err);
     }
+
+    notifyLater([dcr.UserId], {
+        title: outcome === 'RETURNED' ? 'DCR returned' : 'DCR approved',
+        body: outcome === 'RETURNED' ? `Your DCR for ${dcr.ReportDate} needs changes: ${reviewRemarks}`.slice(0, 300) : `Your DCR for ${dcr.ReportDate} was approved.`,
+        data: { screen: 'Dcr' },
+    });
 
     return { DcrId: dcr.DcrId, Status: outcome };
 };

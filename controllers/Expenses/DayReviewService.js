@@ -18,6 +18,7 @@ const { forEachOrganisation } = require('../../utils/orgContext');
 const { auditQuery } = require('../../utils/audit');
 const { displayName } = require('../../utils/reportScope');
 const { generateUUID } = require('../../utils/commonUtils');
+const { notifyLater } = require('../../utils/push');
 const { fail, isGuid, requireActingUser, sameId } = require('../../utils/access');
 
 const REASON_DAYS = 2; // employee's time to give a reason
@@ -308,6 +309,9 @@ exports.managerDecide = async (actingUserId, reviewId, approve, payload = {}) =>
             auditQuery({ entityType: 'ALLOWANCE_DAY', entityId: reviewId, action: approve ? 'MANAGER_APPROVED' : 'MANAGER_REJECTED', actorId: actingUserId, reason: comment }),
         ])
     );
+    if (!approve) {
+        notifyLater([review.UserId], { title: 'TA / DA day reviewed', body: `${review.WorkDate}: not payable. Manager: “${comment}”`.slice(0, 300), data: { screen: 'Allowance' } });
+    }
     return { message: approve ? 'Approved and sent to head office for the final decision.' : 'Rejected. The day is not payable; the employee sees your comment.' };
 };
 
@@ -343,6 +347,11 @@ exports.adminDecide = async (actingUserId, reviewId, approve, payload = {}) => {
             auditQuery({ entityType: 'ALLOWANCE_DAY', entityId: reviewId, action: grantDa ? 'ADMIN_GRANTED_DA' : approve ? 'ADMIN_APPROVED' : 'ADMIN_REJECTED', actorId: actingUserId, reason: comment, after: amount || null }),
         ])
     );
+    notifyLater([review.UserId], {
+        title: 'TA / DA day reviewed',
+        body: `${review.WorkDate}: ${approve ? 'payable' : 'not payable'}${grantDa ? ' with DA granted' : ''}.${comment ? ` Head office: “${comment}”` : ''}`.slice(0, 300),
+        data: { screen: 'Allowance' },
+    });
     if (grantDa) return { message: `Payable with DA granted (${amount.da.toLocaleString('en-IN')} DA + ${amount.ta.toLocaleString('en-IN')} TA). The employee sees your reason.` };
     return { message: approve ? 'Payable. It is added to the claim.' : 'Not payable. The employee and the manager see your reason.' };
 };

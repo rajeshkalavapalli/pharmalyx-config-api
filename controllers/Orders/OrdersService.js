@@ -1,3 +1,4 @@
+const { teamIdsJson } = require('../../utils/reportScope');
 const crypto = require('crypto');
 
 const OrdersDA = require('./OrdersDA');
@@ -190,12 +191,13 @@ exports.getOrders = async (actingUserId, query) => {
 
     const scope = query.scope === 'team' ? 'team' : 'self';
     const fromDate = toMonthStart(query.month || todayKey().slice(0, 7));
-    const inputs = { UserId: actingUserId, Scope: scope, FromDate: fromDate, ToDate: monthEnd(fromDate) };
+    const TeamIds = await teamIdsJson(actingUserId);
+    const inputs = { UserId: actingUserId, Scope: scope, TeamIds, FromDate: fromDate, ToDate: monthEnd(fromDate) };
 
     const [rows, lines, hasTeam] = await Promise.all([
         OrdersDA.getOrders(inputs),
         OrdersDA.getLines(inputs),
-        OrdersDA.hasTeam(actingUserId),
+        JSON.parse(TeamIds).length > 0,
     ]);
 
     const linesByOrder = new Map();

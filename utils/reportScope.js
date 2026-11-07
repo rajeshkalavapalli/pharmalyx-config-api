@@ -73,7 +73,11 @@ const GET_TERRITORIES = `SELECT TerritoryId, TerritoryName FROM Territory ORDER 
 
 const GET_PRODUCTS = `SELECT ProductId, ProductName FROM dbo.Products WHERE IsActive = 1 ORDER BY ProductName`;
 
-const viewAllFor = async (actingUserId) => ((await getPermissions(actingUserId)).has('reports.viewall') ? 1 : 0);
+// Head office view: reports.viewall, or the admin (masters.edit) who runs the whole company.
+const viewAllFor = async (actingUserId) => {
+    const permissions = await getPermissions(actingUserId);
+    return permissions.has('reports.viewall') || permissions.has('masters.edit') ? 1 : 0;
+};
 
 // Everyone the acting user may report on.
 const getScopeUsers = async (actingUserId) => {
@@ -82,6 +86,20 @@ const getScopeUsers = async (actingUserId) => {
     const users = await customQuery(GET_SCOPE_USERS, { ActingUserId: actingUserId, ViewAll });
     return { users, viewAll: Boolean(ViewAll) };
 };
+
+// Ids of everyone the acting user may see, without themselves (JSON for OPENJSON in team queries).
+const teamIdsJson = async (actingUserId) => {
+    const { users } = await getScopeUsers(actingUserId);
+    return JSON.stringify(users.filter((user) => !sameId(user.UserId, actingUserId)).map((user) => String(user.UserId)));
+};
+
+const isInScope = async (actingUserId, targetUserId) => {
+    const { users } = await getScopeUsers(actingUserId);
+    return users.some((user) => sameId(user.UserId, targetUserId));
+};
+
+// SQL test: is `${column}` one of the ids in @TeamIds (from teamIdsJson)?
+const IN_TEAM = (column) => `${column} IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds))`;
 
 const getFilterOptions = async (actingUserId) => {
     const [{ users, viewAll }, territories, products] = await Promise.all([
@@ -156,4 +174,4 @@ const resolveScope = async (actingUserId, userId) => {
     return { ActingUserId: actingUserId, ViewAll, UserId: userId || null };
 };
 
-module.exports = { SCOPE_CTE, displayName, getScopeUsers, getFilterOptions, resolveFilters, resolveScope, MAX_RANGE_DAYS };
+module.exports = { SCOPE_CTE, displayName, getScopeUsers, teamIdsJson, isInScope, IN_TEAM, viewAllFor, getFilterOptions, resolveFilters, resolveScope, MAX_RANGE_DAYS };

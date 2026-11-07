@@ -1,3 +1,4 @@
+const { canViewUser } = require('../../utils/access');
 const DeviationDA = require('./DeviationDA');
 
 const { generateUUID } = require('../../utils/commonUtils');
@@ -83,7 +84,7 @@ const loadVisible = async (actingUserId, deviationId) => {
         throw fail(404, 'Deviation not found.');
     }
 
-    if (!sameId(row.UserId, actingUserId) && !sameId(row.ManagerId, actingUserId)) {
+    if (!sameId(row.UserId, actingUserId) && !sameId(row.ManagerId, actingUserId) && !(await canViewUser(actingUserId, row.UserId))) {
         throw fail(403, 'You are not allowed to view this deviation.');
     }
 

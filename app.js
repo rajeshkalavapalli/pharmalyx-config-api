@@ -1,6 +1,7 @@
 const express = require("express")
 const app = express()
 const cors = require("cors");
+const helmet = require("helmet");
 
 const userRoutes = require('./controllers/Users')
 
@@ -88,16 +89,26 @@ const DayReviews = require('./controllers/Expenses/DayReviewService');
 const DoctorSpend = require('./controllers/DoctorSpend');
 const DataImport = require('./controllers/DataImport');
 const JointWork = require('./controllers/JointWork');
+const Push = require('./controllers/Push');
 
 // Database: db.js connects at start-up and retries on its own until SQL Server answers.
 require('./db');
 const { authenticate } = require('./utils/auth');
 
+// Standard security headers. Photos and receipts are shown by the web app from another address,
+// so files may be read cross-origin; nothing here is a web page, so no page policy is needed.
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' }, contentSecurityPolicy: false }));
+// Behind Render's proxy: req.ip is the caller's address (used to slow down password guessing).
+app.set('trust proxy', 1);
+
 // 2 MB: data-import checks can carry a decision for every row.
 app.use(express.json({ limit: '2mb' }));
 // CORS_ORIGINS: comma-separated web addresses allowed to call the API (the hosted web app).
-// Not set (local development): any origin.
-const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean);
+// Not set: on a hosted server (Render sets RENDER) only our own sites; on a local machine any origin.
+// The phone app sends no Origin header, so CORS never blocks it.
+const DEFAULT_ORIGINS = ['https://demo.pharmalyx.in', 'https://app.pharmalyx.in', 'https://pharmalyx.in', 'https://www.pharmalyx.in', 'https://pharmalyx-dev-ui.onrender.com'];
+const configuredOrigins = (process.env.CORS_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean);
+const allowedOrigins = configuredOrigins.length ? configuredOrigins : process.env.RENDER ? DEFAULT_ORIGINS : [];
 app.use(cors(allowedOrigins.length ? { origin: allowedOrigins } : {}));
 
 // Every /app route requires a verified session except POST /app/login.
@@ -148,6 +159,7 @@ app.use('/app', FieldLedger)
 app.use('/app', DoctorSpend)
 app.use('/app', DataImport)
 app.use('/app', JointWork)
+app.use('/app', Push)
 
 
 

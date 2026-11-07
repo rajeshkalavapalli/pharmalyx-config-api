@@ -6,6 +6,7 @@ const { auditQuery } = require('../../utils/audit');
 const { getPermissions } = require('../../utils/permissions');
 const { resolveScope } = require('../../utils/reportScope');
 const { fail, isGuid, optionalText, requireActingUser, sameId, todayKey } = require('../../utils/access');
+const { placeOfTerritory } = require('../../utils/placeOfTerritory');
 const {
     boundingBox,
     distanceMeters,
@@ -390,6 +391,8 @@ exports.requestNewDoctor = async (actingUserId, payload) => {
     const { IsActive: _ignored, ...fields } = parseDoctorFields(payload);
     const location = parseLocation(payload);
     await validateArea(fields);
+    // The phone form has no country / state: use the territory's.
+    Object.assign(fields, await placeOfTerritory(fields));
 
     const doctorId = generateUUID();
     const now = new Date();
@@ -581,6 +584,11 @@ const resubmitNewDoctor = async (actingUserId, request, payload, resubmitOf) => 
     const settings = await loadSettings();
     const { IsActive: _ignored, ...fields } = parseDoctorFields(payload.Changes || {});
     await validateArea(fields);
+    // Sent: kept; else the (maybe new) territory's; else what the doctor already had.
+    Object.assign(fields, await placeOfTerritory(fields).catch((error) => {
+        if (error.status === 400 && doctor.CountryId && doctor.StateId) return { CountryId: doctor.CountryId, StateId: doctor.StateId };
+        throw error;
+    }));
 
     const now = new Date();
     const warnings = [];

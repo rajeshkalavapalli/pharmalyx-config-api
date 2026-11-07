@@ -287,3 +287,60 @@
 - New company rule TOUR_PLAN_APPROVAL (Rules / Settings): 1 = confirmed tour plans go to the reporting manager for approval, 0 = approved straight away inside the territory (default); rules added later can be saved for the first time from Settings
 - Review alerts go up the reporting line (ASM, RSM, ZSM ... head office), never to the person they are about; employees see a neutral "in review" status for their own TA / DA days and visits
 - Joint work (controllers/JointWork, tables JointWorkDays and VisitJointWorkers, run the SQL in SSMS): ask managers / team / territory colleagues to work a day together, they confirm or decline, the day's visits carry the colleagues automatically, coaching feedback (1-5 rating + notes) shown to the field person; API /app/joint-work
+
+
+### V 1.0.65
+
+- Joint work in the tour plan (column TourPlanDetails.JointWithUserId, run the SQL in SSMS): a senior (ASM, RSM ...) plans a day as "joint work with <team member>"; the area is the team member's planned area for that date; no acceptance needed in the hierarchy
+- Clash checks: a senior can't plan joint work on the team member's off day, an unplanned Sunday or a day of pending / approved leave; only own team members (any level below)
+- Saving the plan (not as a draft) confirms the joint days and locks them in the team member's plan: they can't make it an off day or change the area, only fill the area while it is empty
+- A senior can move a team member's planned day to another area (POST /app/tourplan/team/:userId/day); it is recorded in the team member's plan as an approved deviation "Changed by <senior> for joint work"
+- Leave: applying for leave on a joint day warns the person; approved leave cancels the joint day and the senior gets a "replan" alert
+- My Day (/app/work/today) shows today's joint work; alerts show joint days a senior planned with me in the next week
+- Joint work days planned from the tour plan can't be cancelled or declined from the Joint Work page
+
+
+### V 1.0.66
+
+- Uploaded files (doctor signboard photos, order slips, delivery receipts, spend documents) can be stored in the database: set `FILE_STORE=db` (table dbo.FileBlobs, run the SQL in SSMS). Hosts without a lasting disk (Render) keep the files across deploys
+- Without the table, or without `FILE_STORE=db`, files stay in the uploads folder as before; files saved in the folder earlier still open after the switch
+
+
+### V 1.0.67
+
+- Phone notifications through the Expo push service (utils/push.js, table dbo.PushTokens, run the SQL in SSMS): POST / DELETE /app/push/token registers the signed-in person's phone
+- Sent for: tour plan sent for approval (to the manager), approved / returned (to the owner), joint work days planned by a senior (to the team member), joint work request and answer, leave applied (to the manager) and decided (to the employee), DCR approved / returned, TA / DA day decided by the manager or head office
+- Notifications never block or fail the action; tokens Expo reports as not registered are removed
+
+
+### V 1.0.68
+
+- Fixed "Failed to send the new doctor": the phone's Add doctor form has no country / state (NOT NULL on dbo.Doctor), so they are now taken from the territory's state (utils/placeOfTerritory.js); same for a rejected new doctor sent again
+- Admin create doctor accepts the phone's column-name keys (DoctorName, TerritoryId, ...) as well as the web form's camelCase keys; create / update fill a missing country / state from the territory
+- Pharmacy and stockist create / update: clear 400 message when owner, phone, address, territory or area is missing, country / state from the territory when blank, optional columns default to empty; their errors now return a readable message instead of "Internal Server Error"
+- Data import: doctors, chemists and stockists use the row's State column first, then the territory's; a new row whose territory has no state is marked as an error instead of failing the whole import
+
+
+### V 1.0.69
+
+- Samples / gifts: an admin (masters.edit) can now issue stock to anyone in the company, not only the reporting manager; nobody can issue to themselves
+- GET /app/stock/recipients: who the signed-in person can issue to (direct reports, or everyone active for an admin)
+- Stock balances / history: an admin can open any person's stock; managers can open anyone in their team (all levels below)
+
+
+### V 1.0.70
+
+- Team view widened: managers see everyone below them (all levels, not only direct reports) and head office / admin (reports.viewall or masters.edit) sees the whole company; approving still stays with the reporting manager
+- utils/access canViewUser + resolveViewUser use the reporting hierarchy (RCPA, pre-call, doctor business, doctor plan, feedback, sales plan, samples / gifts)
+- Opening a person's DCRs, visits, doctors, tour plans, deviations, doctor plans and secondary statements follows the same rule
+- Orders and sales business "My team", the team picker (/app/my-doctors/team) and the dashboard team figures cover the whole team (reportScope.teamIdsJson / IN_TEAM)
+- Reports and insights: admin (masters.edit) counts as head office and sees everyone
+- Tour plan of a team member opens for managers above and head office too (edit stays with the owner, approve with the reporting manager)
+
+
+### V 1.0.71
+
+- Sign-in protection (utils/loginLimiter.js): 5 wrong passwords for a login name lock it for 15 minutes; 20 wrong passwords from one address in 15 minutes block that address for 15 minutes; answered with 429 and the minutes left
+- Security headers with helmet (nosniff, HSTS, frame protection, no X-Powered-By); files stay readable by the web app (cross-origin resource policy)
+- CORS: when CORS_ORIGINS is not set on a hosted server, only our sites may call the API (demo / app / www .pharmalyx.in and the Render web app); local machines still allow any origin; the phone app is not affected
+- trust proxy on, so the caller's address is right behind Render

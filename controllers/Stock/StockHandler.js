@@ -7,6 +7,9 @@ exports.getBalances = handle('load stock', (req) =>
 exports.getLedger = handle('load stock history', (req) =>
     StockService.getLedger(actingUser(req), req.query));
 
+exports.getRecipients = handle('load who you can issue to', (req) =>
+    StockService.getRecipients(actingUser(req)));
+
 exports.issueStock = handle('issue stock', (req) =>
     StockService.issueStock(actingUser(req), req.body || {}));
 

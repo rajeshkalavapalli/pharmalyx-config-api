@@ -488,6 +488,8 @@ const flagInFileDuplicates = (entityType, results) => {
     }
 };
 
+const NEEDS_STATE = new Set(['DOCTOR', 'CHEMIST', 'STOCKIST']);
+
 // What importing will do with the row, given the match and the admin's choice.
 const decide = (entityType, r, options, decision, ctx) => {
     const matcher = MATCHERS[entityType];
@@ -510,6 +512,13 @@ const decide = (entityType, r, options, decision, ctx) => {
     else if (r.match.possible) action = 'SKIP';
     else action = options.existing === 'UPDATE' ? 'UPDATE' : 'SKIP';
     r.action = action;
+
+    // Doctors, chemists and stockists need a state (the database requires it): a new row without one would fail the whole import.
+    const { state, territory } = r.values;
+    const placeOk = state?.id ? state.countryId : territory?.stateId && territory?.countryId;
+    if (action === 'CREATE' && NEEDS_STATE.has(entityType) && territory && !placeOk) {
+        r.messages.push({ level: 'error', field: 'territory', text: `Territory "${territory.label}" has no state in Pharmalyx. Add a State column to the file, or set the territory's state first.` });
+    }
 
     if (r.match) {
         const what = `Matches ${r.match.label} by ${r.match.how}`;

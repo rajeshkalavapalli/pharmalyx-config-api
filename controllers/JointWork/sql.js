@@ -56,6 +56,39 @@ module.exports = {
                           WHERE v.UserId = j.UserId AND v.VisitDate = j.WorkDate);
         IF @@ROWCOUNT = 0 THROW 50409, 'This joint work day already has visits, or it is not yours to cancel.', 1;`,
 
+    // Confirmed joint work days of a person (either side) in a date range: leave touching them.
+    LEAVE_CLASHES: () => `${ROW}
+        WHERE (j.UserId = @UserId OR j.ColleagueUserId = @UserId) AND j.Status = 'CONFIRMED' AND j.WorkDate BETWEEN @From AND @To
+        ORDER BY j.WorkDate`,
+
+    CANCEL_FOR_LEAVE: () => `
+        UPDATE dbo.JointWorkDays SET Status = 'DECLINED', ResponseNote = @Note, RespondedOn = @Now
+        WHERE (UserId = @UserId OR ColleagueUserId = @UserId) AND Status <> 'DECLINED' AND WorkDate BETWEEN @From AND @To;`,
+
+    // For the alerts: plan days of mine (as the senior) cancelled by leave, and days seniors planned with me soon.
+    REPLAN_FOR: () => `${ROW}
+        WHERE j.ColleagueUserId = @UserId AND j.RequestedBy = j.ColleagueUserId AND j.Status = 'DECLINED' AND j.WorkDate >= @Today
+        ORDER BY j.WorkDate`,
+    UPCOMING_FOR: () => `${ROW}
+        WHERE j.UserId = @UserId AND j.RequestedBy = j.ColleagueUserId AND j.Status = 'CONFIRMED' AND j.WorkDate BETWEEN @Today AND @Until
+        ORDER BY j.WorkDate`,
+
+    // Today's joint work of a person, either side, with the field person's planned area.
+    TODAY: () => `
+        SELECT j.JointWorkId, j.UserId, ${displayName('u')} AS UserName, j.ColleagueUserId, ${displayName('c')} AS ColleagueName, j.Status,
+               t.TerritoryName, a.AreaName
+        FROM dbo.JointWorkDays j
+        INNER JOIN Users u ON u.UserId = j.UserId
+        INNER JOIN Users c ON c.UserId = j.ColleagueUserId
+        OUTER APPLY (
+            SELECT TOP 1 d.TerritoryId, d.AreaId FROM dbo.TourPlan tp
+            INNER JOIN dbo.TourPlanDetails d ON d.TourPlanId = tp.TourPlanId
+            WHERE tp.UserId = j.UserId AND d.PlanDate = j.WorkDate AND d.DayType = 'working'
+        ) p
+        LEFT JOIN Territory t ON t.TerritoryId = p.TerritoryId
+        LEFT JOIN Areas a ON a.AreaId = p.AreaId
+        WHERE (j.UserId = @UserId OR j.ColleagueUserId = @UserId) AND j.WorkDate = @Today AND j.Status <> 'DECLINED'`,
+
     ADD_VISIT_WORKER: () => `
         IF NOT EXISTS (SELECT 1 FROM dbo.VisitJointWorkers WHERE VisitId = @VisitId AND UserId = @UserId)
             INSERT INTO dbo.VisitJointWorkers (VisitId, UserId) VALUES (@VisitId, @UserId);`,
