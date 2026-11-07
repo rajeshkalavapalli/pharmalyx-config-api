@@ -51,20 +51,20 @@ const SQL = {
     // Latest field events across the team (newest first).
     ACTIVITY: `
         SELECT TOP 15 * FROM (
-            SELECT 'VISIT' AS Kind, COALESCE(v.CheckInAt, v.CreatedOn) AS At, ${displayName('u')} AS Who,
+            SELECT 'VISIT' AS Kind, COALESCE(v.CheckInAt, v.RecordedAt, v.CreatedOn) AS At, ${displayName('u')} AS Who,
                    CONCAT('Visited Dr. ', d.DoctorName) AS Text, ${VALID} AS Tag
             FROM dbo.Visits v INNER JOIN Users u ON u.UserId = v.UserId LEFT JOIN dbo.Doctor d ON d.DoctorId = v.DoctorId
             WHERE ${TEAM_U} AND v.VisitDate >= @Since
             UNION ALL
-            SELECT 'ORDER', o.CreatedOn, ${displayName('u')}, CONCAT('Booked ', o.OrderNumber, ' · Rs ', FORMAT(o.NetAmount, 'N0')), o.Status
+            SELECT 'ORDER', o.CreatedOn, ${displayName('u')}, CONCAT(N'Booked ', o.OrderNumber, N' · ₹', FORMAT(o.NetAmount, 'N0')), o.Status
             FROM dbo.Orders o INNER JOIN Users u ON u.UserId = o.UserId
             WHERE ${TEAM_U} AND o.OrderDate >= @Since
             UNION ALL
-            SELECT 'DELIVERY', dl.CreatedOn, ${displayName('u')}, CONCAT('Delivered to ', p.PharmacyName, ' · Rs ', FORMAT(dl.TotalValue, 'N0')), NULL
+            SELECT 'DELIVERY', dl.CreatedOn, ${displayName('u')}, CONCAT(N'Delivered to ', p.PharmacyName, N' · ₹', FORMAT(dl.TotalValue, 'N0')), NULL
             FROM dbo.ChemistDeliveries dl INNER JOIN Users u ON u.UserId = dl.UserId LEFT JOIN Pharmacy p ON p.PharmacyId = dl.PharmacyId
             WHERE ${TEAM_U} AND dl.DeliveryDate >= @Since AND dl.VoidedOn IS NULL
             UNION ALL
-            SELECT 'PAYMENT', c.CreatedOn, ${displayName('u')}, CONCAT('Collected Rs ', FORMAT(ABS(c.Amount), 'N0'), ' from ', p.PharmacyName), c.PaymentMode
+            SELECT 'PAYMENT', c.CreatedOn, ${displayName('u')}, CONCAT(N'Collected ₹', FORMAT(ABS(c.Amount), 'N0'), N' from ', p.PharmacyName), c.PaymentMode
             FROM dbo.ChemistLedger c INNER JOIN Users u ON u.UserId = c.UserId LEFT JOIN Pharmacy p ON p.PharmacyId = c.PharmacyId
             WHERE ${TEAM_U} AND c.EntryType = 'PAYMENT' AND c.EntryDate >= @Since AND c.VoidedOn IS NULL
             UNION ALL
