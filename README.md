@@ -351,3 +351,4 @@
 - GET /app/dashboard/overview (Dashboard/OverviewService.js): month headline for the team / company (visits today and this month, verified %, POB, secondary sales, chemist deliveries, collections and cash still with MRs), leaderboard of the people below (visits, valid %, doctors, POB, DCRs), latest field activity (visits, orders, deliveries, payments, DCRs, leave; last 7 days) and attention counts (payments to confirm, missed DCRs, low sample / gift stock, not in the field today)
 - Overview: collections shown as positive amounts (payments are stored as negative ledger entries)
 - Overview: office admins (designation ADMIN) are left out of the leaderboard, the people count and "not in the field today"
+- Dashboard header "reps" count also leaves out office admins and inactive people (matches the overview)

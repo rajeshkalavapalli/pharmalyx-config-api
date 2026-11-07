@@ -246,7 +246,8 @@ module.exports = {
     GET_TEAM_TODAY: () => {
         return `
             SELECT
-                (SELECT COUNT(*) FROM Users WHERE UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds))) AS Reps,
+                (SELECT COUNT(*) FROM Users ru LEFT JOIN SystemLovDetails rs ON rs.SystemLovDetailId = ru.DesignationId
+                 WHERE ru.UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds)) AND ISNULL(ru.IsActive, 1) = 1 AND ISNULL(rs.SystemLovDetailCode, '') <> 'ADMIN') AS Reps,
                 (SELECT COUNT(DISTINCT v.UserId) FROM dbo.Visits v
                  INNER JOIN Users u ON u.UserId = v.UserId
                  WHERE u.UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds)) AND v.VisitDate = @Today) AS RepsActiveToday,
