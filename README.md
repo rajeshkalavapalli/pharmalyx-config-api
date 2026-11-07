@@ -344,3 +344,8 @@
 - Security headers with helmet (nosniff, HSTS, frame protection, no X-Powered-By); files stay readable by the web app (cross-origin resource policy)
 - CORS: when CORS_ORIGINS is not set on a hosted server, only our sites may call the API (demo / app / www .pharmalyx.in and the Render web app); local machines still allow any origin; the phone app is not affected
 - trust proxy on, so the caller's address is right behind Render
+
+
+### V 1.0.72
+
+- GET /app/dashboard/overview (Dashboard/OverviewService.js): month headline for the team / company (visits today and this month, verified %, POB, secondary sales, chemist deliveries, collections and cash still with MRs), leaderboard of the people below (visits, valid %, doctors, POB, DCRs), latest field activity (visits, orders, deliveries, payments, DCRs, leave; last 7 days) and attention counts (payments to confirm, missed DCRs, low sample / gift stock, not in the field today)

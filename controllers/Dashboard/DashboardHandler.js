@@ -20,3 +20,7 @@ const { handle, actingUser } = require('../../utils/http');
 
 // One sidebar module's numbers and bar charts (tab bar on the dashboard).
 exports.getModule = handle('load the dashboard section', (req) => ModulesService.getModule(actingUser(req), req.params.section, req.query));
+
+const OverviewService = require('./OverviewService');
+
+exports.getOverview = handle('load the overview', (req) => OverviewService.getOverview(actingUser(req)));

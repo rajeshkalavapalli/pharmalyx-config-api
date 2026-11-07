@@ -6,5 +6,6 @@ const Dashboard = require('./DashboardHandler');
 
 router.get('/dashboard', Dashboard.getDashboard);
 router.get('/dashboard/modules/:section', Dashboard.getModule);
+router.get('/dashboard/overview', Dashboard.getOverview);
 
 module.exports = router;
