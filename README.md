@@ -387,3 +387,9 @@
 
 - Chemist availability (controllers/ChemistAvailability, table dbo.ChemistAvailability): reps mark each product on the shelf or missing at their assigned chemists (POST /app/chemists/availability, GET ?pharmacyId= for the latest status); GET /app/chemists/availability/summary gives the team's stock-outs (latest check per chemist and product)
 - Insights: CHEMIST_PRODUCT_MISSING alert when a product is missing at several chemists
+
+
+### V 1.0.78
+
+- Weekly owner brief (GET /app/dashboard/brief): up to 7 plain lines - visits and verified %, people in the field, POB / secondary / collections, top performer, people with no visits, the open high alerts by type, and payments / missed DCRs / low stock to act on; same lines can later go by email / WhatsApp
+- Insights summary counts the new groups (Field truth, Money, Manager accountability)

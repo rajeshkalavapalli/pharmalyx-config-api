@@ -612,7 +612,7 @@ exports.getAlerts = async (actingUserId, query) => {
             high: count((item) => item.status === 'OPEN' && item.severity === 'HIGH'),
             acknowledged: count((item) => item.status === 'ACKNOWLEDGED'),
             resolved: all.length - alerts.length,
-            byGroup: ['DOCTOR', 'REP', 'STOCK', 'GPS'].map((group) => ({ group, open: count((item) => item.group === group && item.status === 'OPEN') })),
+            byGroup: ['DOCTOR', 'REP', 'STOCK', 'GPS', 'TRUTH', 'MONEY', 'MANAGER'].map((group) => ({ group, open: count((item) => item.group === group && item.status === 'OPEN') })),
         },
         rules: rules.map(({ code, title, group, groupLabel, enabled }) => ({ code, title, group, groupLabel, enabled })),
         alerts,

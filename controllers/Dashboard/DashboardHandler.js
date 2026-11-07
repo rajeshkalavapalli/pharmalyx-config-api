@@ -24,3 +24,7 @@ exports.getModule = handle('load the dashboard section', (req) => ModulesService
 const OverviewService = require('./OverviewService');
 
 exports.getOverview = handle('load the overview', (req) => OverviewService.getOverview(actingUser(req)));
+
+const BriefService = require('./BriefService');
+
+exports.getBrief = handle('load the weekly brief', (req) => BriefService.getBrief(actingUser(req)));
