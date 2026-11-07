@@ -28,7 +28,7 @@ exports.getBrief = async (actingUserId) => {
     const board = overview.leaderboard.filter((p) => p.visits > 0);
     if (board.length) lines.push({ tone: 'success', text: `Top performer: ${board[0].Name} - ${board[0].visits} visits, ${board[0].validPct ?? 0}% valid, ${rupees(board[0].pobValue)} POB.` });
     const idle = overview.leaderboard.filter((p) => p.visits === 0);
-    if (idle.length) lines.push({ tone: 'warning', text: `${idle.length} ${idle.length === 1 ? 'person has' : 'people have'} no visits this month: ${idle.slice(0, 3).map((p) => p.Name).join(', ')}${idle.length > 3 ? '…' : ''}.` });
+    if (idle.length) lines.push({ tone: 'warning', text: `${idle.length} ${idle.length === 1 ? 'person has' : 'people have'} no visits this month: ${idle.slice(0, 3).map((p) => String(p.Name).trim()).join(', ')}${idle.length > 3 ? ` and ${idle.length - 3} more` : ''}.` });
 
     // The open high alerts, if this person may see alerts.
     let alerts = [];

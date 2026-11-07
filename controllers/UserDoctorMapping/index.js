@@ -18,5 +18,11 @@ router.get('/get-user-doctor-mappings', canView, userDoctorMappingHandler.getUse
 router.put('/update-user-doctor-mapping', canAssign, userDoctorMappingHandler.updateUserDoctorMapping)
 router.get('/get-user-doctor-mapping-by-id/:userId', canView, userDoctorMappingHandler.getUserDoctorMappingById)
 router.get('/get-user-doctor-mapping-by-user-id/:userId', canView, userDoctorMappingHandler.getUserDoctorMappingByUserId)
-router.delete('/delete-user-doctor-mappings', canAssign, userDoctorMappingHandler.deleteUserDoctorMappings)    
+router.delete('/delete-user-doctor-mappings', canAssign, userDoctorMappingHandler.deleteUserDoctorMappings)
+
+// Hand over all of a leaving rep's doctors to another person.
+const Handover = require('./HandoverService');
+const { handle, actingUser } = require('../../utils/http');
+router.post('/doctors/handover/preview', canAssign, handle('check the handover', (req) => Handover.preview(actingUser(req), req.body || {})));
+router.post('/doctors/handover', canAssign, handle('hand over the doctors', (req) => Handover.handover(actingUser(req), req.body || {})));    
 module.exports = router

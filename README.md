@@ -393,3 +393,9 @@
 
 - Weekly owner brief (GET /app/dashboard/brief): up to 7 plain lines - visits and verified %, people in the field, POB / secondary / collections, top performer, people with no visits, the open high alerts by type, and payments / missed DCRs / low stock to act on; same lines can later go by email / WhatsApp
 - Insights summary counts the new groups (Field truth, Money, Manager accountability)
+
+
+### V 1.0.79
+
+- Doctor handover (POST /app/doctors/handover and /preview): moves all of a leaving rep's active doctors to another person in one transaction (reactivates or adds the new links, closes the old ones), audited, and the new rep gets a phone notification; visits, samples and prescriptions stay with each doctor
+- Weekly brief: names trimmed, "and N more" instead of an ellipsis
