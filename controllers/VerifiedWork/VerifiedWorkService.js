@@ -440,6 +440,9 @@ const doctorStatus = async (userId, monthStart, settings) => {
             HospitalName: doctor.HospitalGroup || doctor.HospitalName,
             VerificationStatus: doctor.VerificationStatus,
             clinicPinned: doctor.ClinicLatitude != null || Boolean(doctor.HospitalId),
+            // Where the clinic (or its hospital) is, for "nearest first" on the phone.
+            lat: doctor.HospitalLatitude != null ? Number(doctor.HospitalLatitude) : doctor.ClinicLatitude != null ? Number(doctor.ClinicLatitude) : null,
+            lng: doctor.HospitalLongitude != null ? Number(doctor.HospitalLongitude) : doctor.ClinicLongitude != null ? Number(doctor.ClinicLongitude) : null,
             required,
             valid,
             notCounted: Number(count?.NotCounted || 0),

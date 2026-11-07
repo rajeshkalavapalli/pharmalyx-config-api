@@ -386,7 +386,8 @@ module.exports = {
     MY_DOCTORS: () => {
         return `
             SELECT d.DoctorId, d.DoctorName, d.Speciality, d.Category, d.VisitsPerMonth, TRY_CONVERT(UNIQUEIDENTIFIER, d.AreaId) AS AreaId, a.AreaName,
-                   d.HospitalName, d.VerificationStatus, d.ClinicLatitude, d.ClinicLongitude, d.HospitalId, h.HospitalName AS HospitalGroup
+                   d.HospitalName, d.VerificationStatus, d.ClinicLatitude, d.ClinicLongitude, d.HospitalId, h.HospitalName AS HospitalGroup,
+                   h.Latitude AS HospitalLatitude, h.Longitude AS HospitalLongitude
             FROM dbo.UserDoctorMapping m
             INNER JOIN dbo.Doctor d ON d.DoctorId = m.DoctorId
             LEFT JOIN Areas a ON a.AreaId = TRY_CONVERT(UNIQUEIDENTIFIER, d.AreaId)

@@ -370,3 +370,8 @@
 - Field Truth Score (controllers/Truth): 0-100 per person per month = presence 40 (Valid / Needs a look visits) + pattern 20 (visits ending right at the minimum stay, many doctors in minutes) + audits 25 + outcome 15 (share of visited doctors prescribing vs the team, only after 90 days in the job); bands Trusted / Watch / Risk; GET /app/truth/scores (team, admins left out) and GET /app/truth/me (own score, audits as counts only)
 - Learning mode: work setting TRUTH_LEARNING_UNTIL (yyyymmdd) - scores shown as coaching-only until then
 - Insights: AUDIT_COVERAGE (fewer audits than required this month or skipped audits) and AUDIT_FAILED alerts
+
+
+### V 1.0.75
+
+- My Day doctors carry the clinic (or hospital) location (lat / lng) so the phone can order them nearest first
