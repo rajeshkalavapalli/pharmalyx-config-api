@@ -20,9 +20,9 @@ const SQL = {
             (SELECT COUNT(*) FROM dbo.Orders o INNER JOIN Users u ON u.UserId = o.UserId WHERE ${TEAM_U} AND o.OrderDate BETWEEN @MonthStart AND @MonthEnd AND o.Status <> 'CANCELLED') AS PobCount,
             (SELECT ISNULL(SUM(st.SalesValue), 0) FROM dbo.SecondaryStatements st INNER JOIN Users u ON u.UserId = st.UserId WHERE ${TEAM_U} AND st.StatementMonth = @MonthStart AND st.Status IN ('SUBMITTED', 'APPROVED')) AS SecondaryValue,
             (SELECT ISNULL(SUM(d.TotalValue), 0) FROM dbo.ChemistDeliveries d INNER JOIN Users u ON u.UserId = d.UserId WHERE ${TEAM_U} AND d.DeliveryDate BETWEEN @MonthStart AND @MonthEnd AND d.VoidedOn IS NULL) AS DeliveredValue,
-            (SELECT ISNULL(SUM(c.Amount), 0) FROM dbo.ChemistLedger c INNER JOIN Users u ON u.UserId = c.UserId WHERE ${TEAM_U} AND c.EntryType = 'PAYMENT' AND c.EntryDate BETWEEN @MonthStart AND @MonthEnd AND c.VoidedOn IS NULL) AS Collected,
+            (SELECT ISNULL(SUM(ABS(c.Amount)), 0) FROM dbo.ChemistLedger c INNER JOIN Users u ON u.UserId = c.UserId WHERE ${TEAM_U} AND c.EntryType = 'PAYMENT' AND c.EntryDate BETWEEN @MonthStart AND @MonthEnd AND c.VoidedOn IS NULL) AS Collected,
             (SELECT COUNT(*) FROM dbo.ChemistLedger c INNER JOIN Users u ON u.UserId = c.UserId WHERE ${TEAM_U} AND c.EntryType = 'PAYMENT' AND c.DepositStatus = 'WITH_MR' AND c.VoidedOn IS NULL) AS PaymentsToConfirm,
-            (SELECT ISNULL(SUM(c.Amount), 0) FROM dbo.ChemistLedger c INNER JOIN Users u ON u.UserId = c.UserId WHERE ${TEAM_U} AND c.EntryType = 'PAYMENT' AND c.DepositStatus = 'WITH_MR' AND c.VoidedOn IS NULL) AS CashWithMrs
+            (SELECT ISNULL(SUM(ABS(c.Amount)), 0) FROM dbo.ChemistLedger c INNER JOIN Users u ON u.UserId = c.UserId WHERE ${TEAM_U} AND c.EntryType = 'PAYMENT' AND c.DepositStatus = 'WITH_MR' AND c.VoidedOn IS NULL) AS CashWithMrs
     `,
 
     // One row per person below the acting user (active), with this month's numbers.
@@ -64,7 +64,7 @@ const SQL = {
             FROM dbo.ChemistDeliveries dl INNER JOIN Users u ON u.UserId = dl.UserId LEFT JOIN Pharmacy p ON p.PharmacyId = dl.PharmacyId
             WHERE ${TEAM_U} AND dl.DeliveryDate >= @Since AND dl.VoidedOn IS NULL
             UNION ALL
-            SELECT 'PAYMENT', c.CreatedOn, ${displayName('u')}, CONCAT('Collected Rs ', FORMAT(c.Amount, 'N0'), ' from ', p.PharmacyName), c.PaymentMode
+            SELECT 'PAYMENT', c.CreatedOn, ${displayName('u')}, CONCAT('Collected Rs ', FORMAT(ABS(c.Amount), 'N0'), ' from ', p.PharmacyName), c.PaymentMode
             FROM dbo.ChemistLedger c INNER JOIN Users u ON u.UserId = c.UserId LEFT JOIN Pharmacy p ON p.PharmacyId = c.PharmacyId
             WHERE ${TEAM_U} AND c.EntryType = 'PAYMENT' AND c.EntryDate >= @Since AND c.VoidedOn IS NULL
             UNION ALL
