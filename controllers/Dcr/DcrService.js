@@ -1,3 +1,4 @@
+const { canViewUser } = require('../../utils/access');
 const DcrDA = require('./DcrDA');
 const { notifyLater } = require('../../utils/push');
 
@@ -89,9 +90,7 @@ const resolveTarget = async (actingUserId, userId) => {
     const targetUserId = blank(userId) ? actingUserId : String(userId);
 
     if (!sameId(targetUserId, actingUserId)) {
-        const target = await DcrDA.getUser(targetUserId);
-
-        if (!target || !sameId(target.ManagerId, actingUserId)) {
+        if (!(await canViewUser(actingUserId, targetUserId))) {
             throw fail(403, "You can only view your own or your team's DCRs.");
         }
     }

@@ -326,3 +326,12 @@
 - Samples / gifts: an admin (masters.edit) can now issue stock to anyone in the company, not only the reporting manager; nobody can issue to themselves
 - GET /app/stock/recipients: who the signed-in person can issue to (direct reports, or everyone active for an admin)
 - Stock balances / history: an admin can open any person's stock; managers can open anyone in their team (all levels below)
+
+
+### V 1.0.70
+
+- Team view widened: managers see everyone below them (all levels, not only direct reports) and head office / admin (reports.viewall or masters.edit) sees the whole company; approving still stays with the reporting manager
+- utils/access canViewUser + resolveViewUser use the reporting hierarchy (RCPA, pre-call, doctor business, doctor plan, feedback, sales plan, samples / gifts)
+- Opening a person's DCRs, visits, doctors, tour plans, deviations, doctor plans and secondary statements follows the same rule
+- Orders and sales business "My team", the team picker (/app/my-doctors/team) and the dashboard team figures cover the whole team (reportScope.teamIdsJson / IN_TEAM)
+- Reports and insights: admin (masters.edit) counts as head office and sees everyone

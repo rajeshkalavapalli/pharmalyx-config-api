@@ -1,3 +1,4 @@
+const { canViewUser } = require('../../utils/access');
 
 const TourPlanDA = require('./TourPlanDA');
 
@@ -248,8 +249,8 @@ exports.getTourPlan = async (actingUserId, userId, planMonth) => {
         throw fail(404, 'User not found.');
     }
 
-    // Only the owner or their reporting manager may see a plan.
-    if (!sameId(targetUserId, actingUserId) && !sameId(ownerRow.ManagerId, actingUserId)) {
+    // The owner, their managers above, or head office may see a plan (only the reporting manager approves it).
+    if (!sameId(targetUserId, actingUserId) && !sameId(ownerRow.ManagerId, actingUserId) && !(await canViewUser(actingUserId, targetUserId))) {
         throw fail(403, 'You are not allowed to view this tour plan.');
     }
 
@@ -422,9 +423,7 @@ exports.getPlanHistory = async (actingUserId, userId) => {
     const targetUserId = userId || actingUserId;
 
     if (!sameId(targetUserId, actingUserId)) {
-        const target = await TourPlanDA.getUser(targetUserId);
-
-        if (!target || !sameId(target.ManagerId, actingUserId)) {
+        if (!(await canViewUser(actingUserId, targetUserId))) {
             throw fail(403, 'You are not allowed to view these tour plans.');
         }
     }

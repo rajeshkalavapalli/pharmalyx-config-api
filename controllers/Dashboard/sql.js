@@ -139,7 +139,7 @@ module.exports = {
                 (SELECT MAX(v.VisitDate) FROM dbo.Visits v WHERE v.UserId = u.UserId) AS LastVisitDate
             FROM Users u
             LEFT JOIN SystemLovDetails sld ON sld.SystemLovDetailId = u.DesignationId
-            WHERE u.ManagerId = @UserId
+            WHERE u.UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds))
             ORDER BY Visits DESC, Name
         `;
     },
@@ -238,7 +238,7 @@ module.exports = {
             SELECT CONVERT(VARCHAR(10), v.VisitDate, 23) AS VisitDate, COUNT(*) AS VisitCount
             FROM dbo.Visits v
             INNER JOIN Users u ON u.UserId = v.UserId
-            WHERE u.ManagerId = @UserId AND v.VisitDate BETWEEN @FromDate AND @ToDate
+            WHERE u.UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds)) AND v.VisitDate BETWEEN @FromDate AND @ToDate
             GROUP BY v.VisitDate
         `;
     },
@@ -246,16 +246,16 @@ module.exports = {
     GET_TEAM_TODAY: () => {
         return `
             SELECT
-                (SELECT COUNT(*) FROM Users WHERE ManagerId = @UserId) AS Reps,
+                (SELECT COUNT(*) FROM Users WHERE UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds))) AS Reps,
                 (SELECT COUNT(DISTINCT v.UserId) FROM dbo.Visits v
                  INNER JOIN Users u ON u.UserId = v.UserId
-                 WHERE u.ManagerId = @UserId AND v.VisitDate = @Today) AS RepsActiveToday,
+                 WHERE u.UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds)) AND v.VisitDate = @Today) AS RepsActiveToday,
                 (SELECT COUNT(*) FROM dbo.Visits v
                  INNER JOIN Users u ON u.UserId = v.UserId
-                 WHERE u.ManagerId = @UserId AND v.VisitDate = @Today) AS VisitsToday,
+                 WHERE u.UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds)) AND v.VisitDate = @Today) AS VisitsToday,
                 (SELECT COUNT(*) FROM dbo.TourPlanDeviation d
                  INNER JOIN Users u ON u.UserId = d.UserId
-                 WHERE u.ManagerId = @UserId AND d.DeviationDate BETWEEN @MonthStart AND @MonthEnd) AS DeviationsMonth
+                 WHERE u.UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds)) AND d.DeviationDate BETWEEN @MonthStart AND @MonthEnd) AS DeviationsMonth
         `;
     },
 
@@ -264,7 +264,7 @@ module.exports = {
             SELECT SUM(b.ExpectedValue) AS Expected, SUM(ISNULL(b.ActualValue, 0)) AS Actual
             FROM dbo.DoctorBusiness b
             INNER JOIN Users u ON u.UserId = b.UserId
-            WHERE u.ManagerId = @UserId AND b.BusinessMonth = @MonthStart
+            WHERE u.UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds)) AND b.BusinessMonth = @MonthStart
         `;
     },
 
@@ -273,7 +273,7 @@ module.exports = {
             SELECT -SUM(s.Quantity) AS Given
             FROM dbo.EngagementStock s
             INNER JOIN Users u ON u.UserId = s.UserId
-            WHERE u.ManagerId = @UserId AND s.EntryType = 'DISTRIBUTION'
+            WHERE u.UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds)) AND s.EntryType = 'DISTRIBUTION'
               AND s.EntryDate BETWEEN @MonthStart AND @MonthEnd
         `;
     },
@@ -352,7 +352,7 @@ module.exports = {
             SELECT CONVERT(VARCHAR(10), pc.PlanDate, 23) AS PlanDate, COUNT(*) AS Planned
             FROM dbo.PreCallPlans pc
             INNER JOIN Users u ON u.UserId = pc.UserId
-            WHERE u.ManagerId = @UserId AND pc.PlanDate BETWEEN @FromDate AND @ToDate
+            WHERE u.UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds)) AND pc.PlanDate BETWEEN @FromDate AND @ToDate
             GROUP BY pc.PlanDate
         `;
     },
@@ -374,7 +374,7 @@ module.exports = {
                  LEFT JOIN Territory t ON t.TerritoryId = d.TerritoryId
                  WHERE tp.UserId = u.UserId AND tp.PlanMonth = @MonthStart AND d.PlanDate = @Today) AS TerritoryName
             FROM Users u
-            WHERE u.ManagerId = @UserId
+            WHERE u.UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds))
         `;
     },
 
@@ -383,7 +383,7 @@ module.exports = {
             SELECT pc.UserId, COUNT(*) AS Planned
             FROM dbo.PreCallPlans pc
             INNER JOIN Users u ON u.UserId = pc.UserId
-            WHERE u.ManagerId = @UserId AND pc.PlanDate = @Today
+            WHERE u.UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds)) AND pc.PlanDate = @Today
             GROUP BY pc.UserId
         `;
     },
@@ -399,7 +399,7 @@ module.exports = {
                 ISNULL(SUM(vd.Visits), 0) AS Visits,
                 MAX(CASE WHEN tpd.TerritoryId IS NOT NULL THEN 1 ELSE 0 END) AS PlannedAhead
             FROM dbo.UserDoctorMapping m
-            INNER JOIN Users u ON u.UserId = m.UserId AND u.ManagerId = @UserId
+            INNER JOIN Users u ON u.UserId = m.UserId AND u.UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds))
             INNER JOIN dbo.Doctor d ON d.DoctorId = m.DoctorId
             INNER JOIN Territory t ON t.TerritoryId = TRY_CONVERT(UNIQUEIDENTIFIER, d.TerritoryId)
             LEFT JOIN (
@@ -410,7 +410,7 @@ module.exports = {
             LEFT JOIN (
                 SELECT DISTINCT dt.TerritoryId
                 FROM dbo.TourPlan tp
-                INNER JOIN Users tu ON tu.UserId = tp.UserId AND tu.ManagerId = @UserId
+                INNER JOIN Users tu ON tu.UserId = tp.UserId AND tu.UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds))
                 INNER JOIN dbo.TourPlanDetails dt ON dt.TourPlanId = tp.TourPlanId
                 WHERE tp.PlanMonth = @MonthStart AND dt.DayType = 'working' AND dt.PlanDate >= @Today
             ) tpd ON tpd.TerritoryId = t.TerritoryId

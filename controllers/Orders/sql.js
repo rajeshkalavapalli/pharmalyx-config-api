@@ -1,6 +1,7 @@
-// Whose orders: the user's own (scope self) or their direct reports' (scope team).
+// Whose orders: the user's own (scope self) or their team's (scope team: everyone below them,
+// or the whole company for head office; @TeamIds from reportScope.teamIdsJson).
 const OWNER_FILTER = `
-    ((@Scope = 'self' AND o.UserId = @UserId) OR (@Scope = 'team' AND u.ManagerId = @UserId))
+    ((@Scope = 'self' AND o.UserId = @UserId) OR (@Scope = 'team' AND u.UserId IN (SELECT TRY_CAST([value] AS UNIQUEIDENTIFIER) FROM OPENJSON(@TeamIds))))
 `;
 
 const ORDER_COLUMNS = `

@@ -1,3 +1,4 @@
+const { canViewUser } = require('../../utils/access');
 const SecondarySalesDA = require('./SecondarySalesDA');
 
 const { generateUUID } = require('../../utils/commonUtils');
@@ -358,7 +359,7 @@ exports.getStatementById = async (actingUserId, statementId) => {
     const row = await SecondarySalesDA.getStatementById(statementId);
     if (!row) throw fail(404, 'Statement not found.');
 
-    if (!sameId(row.UserId, actingUserId) && !sameId(row.ManagerId, actingUserId)) {
+    if (!sameId(row.UserId, actingUserId) && !sameId(row.ManagerId, actingUserId) && !(await canViewUser(actingUserId, row.UserId))) {
         throw fail(403, 'Only the MR or their manager can open this statement.');
     }
 

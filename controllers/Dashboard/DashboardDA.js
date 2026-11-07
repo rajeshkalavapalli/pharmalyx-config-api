@@ -1,6 +1,10 @@
 const sql = require('./sql');
 const VisitsDA = require('../Visits/VisitsDA');
 const { customQuery } = require('../../utils/dbFunctions');
+const { teamIdsJson } = require('../../utils/reportScope');
+
+// Team figures cover everyone the user can see: their team at all levels, or the whole company for head office.
+const withTeam = async (UserId, inputs) => ({ ...inputs, TeamIds: await teamIdsJson(UserId) });
 
 const first = async (promise) => (await promise)[0] || null;
 
@@ -25,8 +29,8 @@ exports.getTodayDcr = async (UserId, Today) =>
 
 exports.getApprovals = (UserId) => first(customQuery(sql.GET_APPROVALS(), { UserId }));
 
-exports.getTeam = (UserId, MonthStart, MonthEnd) =>
-    customQuery(sql.GET_TEAM(), { UserId, MonthStart, MonthEnd });
+exports.getTeam = async (UserId, MonthStart, MonthEnd) =>
+    customQuery(sql.GET_TEAM(), await withTeam(UserId, { UserId, MonthStart, MonthEnd }));
 
 // Reused from Visits so the dashboard matches the Visits page exactly.
 exports.getRecentVisits = (UserId, FromDate, ToDate) =>
@@ -66,17 +70,17 @@ exports.getCoverageByCategory = (UserId, MonthStart, MonthEnd) =>
 exports.getMonthlyVisits = (UserId, FromDate, ToDate) =>
     customQuery(sql.GET_MONTHLY_VISITS(), { UserId, FromDate, ToDate });
 
-exports.getTeamVisitDays = (UserId, FromDate, ToDate) =>
-    customQuery(sql.GET_TEAM_VISIT_DAYS(), { UserId, FromDate, ToDate });
+exports.getTeamVisitDays = async (UserId, FromDate, ToDate) =>
+    customQuery(sql.GET_TEAM_VISIT_DAYS(), await withTeam(UserId, { UserId, FromDate, ToDate }));
 
-exports.getTeamToday = (UserId, Today, MonthStart, MonthEnd) =>
-    first(customQuery(sql.GET_TEAM_TODAY(), { UserId, Today, MonthStart, MonthEnd }));
+exports.getTeamToday = async (UserId, Today, MonthStart, MonthEnd) =>
+    first(customQuery(sql.GET_TEAM_TODAY(), await withTeam(UserId, { UserId, Today, MonthStart, MonthEnd })));
 
-exports.getTeamBusiness = (UserId, MonthStart) =>
-    optionalFirst(customQuery(sql.GET_TEAM_BUSINESS(), { UserId, MonthStart }));
+exports.getTeamBusiness = async (UserId, MonthStart) =>
+    optionalFirst(customQuery(sql.GET_TEAM_BUSINESS(), await withTeam(UserId, { UserId, MonthStart })));
 
-exports.getTeamSamples = (UserId, MonthStart, MonthEnd) =>
-    optionalFirst(customQuery(sql.GET_TEAM_SAMPLES(), { UserId, MonthStart, MonthEnd }));
+exports.getTeamSamples = async (UserId, MonthStart, MonthEnd) =>
+    optionalFirst(customQuery(sql.GET_TEAM_SAMPLES(), await withTeam(UserId, { UserId, MonthStart, MonthEnd })));
 
 // Optional: the pre-call tables may not exist yet.
 exports.getTodaySchedule = async (UserId, Today) => (await optional(customQuery(sql.GET_TODAY_SCHEDULE(), { UserId, Today }))) || [];
@@ -88,13 +92,13 @@ exports.getTerritoryCoverage = (UserId, MonthStart, MonthEnd, Today) =>
     customQuery(sql.GET_TERRITORY_COVERAGE(), { UserId, MonthStart, MonthEnd, Today });
 
 exports.getTeamPlannedDays = async (UserId, FromDate, ToDate) =>
-    (await optional(customQuery(sql.GET_TEAM_PLANNED_DAYS(), { UserId, FromDate, ToDate }))) || [];
+    (await optional(customQuery(sql.GET_TEAM_PLANNED_DAYS(), await withTeam(UserId, { UserId, FromDate, ToDate })))) || [];
 
-exports.getTeamMembersToday = (UserId, Today, MonthStart) =>
-    customQuery(sql.GET_TEAM_MEMBERS_TODAY(), { UserId, Today, MonthStart });
+exports.getTeamMembersToday = async (UserId, Today, MonthStart) =>
+    customQuery(sql.GET_TEAM_MEMBERS_TODAY(), await withTeam(UserId, { UserId, Today, MonthStart }));
 
 exports.getTeamPlannedToday = async (UserId, Today) =>
-    (await optional(customQuery(sql.GET_TEAM_PLANNED_TODAY(), { UserId, Today }))) || [];
+    (await optional(customQuery(sql.GET_TEAM_PLANNED_TODAY(), await withTeam(UserId, { UserId, Today })))) || [];
 
-exports.getTeamTerritoryCoverage = (UserId, MonthStart, MonthEnd, Today) =>
-    customQuery(sql.GET_TEAM_TERRITORY_COVERAGE(), { UserId, MonthStart, MonthEnd, Today });
+exports.getTeamTerritoryCoverage = async (UserId, MonthStart, MonthEnd, Today) =>
+    customQuery(sql.GET_TEAM_TERRITORY_COVERAGE(), await withTeam(UserId, { UserId, MonthStart, MonthEnd, Today }));

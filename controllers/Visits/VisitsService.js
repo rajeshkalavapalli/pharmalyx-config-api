@@ -1,3 +1,4 @@
+const { canViewUser } = require('../../utils/access');
 const VisitsDA = require('./VisitsDA');
 const { checkVisit } = require('./gpsChecks');
 const StockService = require('../Stock/StockService');
@@ -97,13 +98,11 @@ const optionalTimestamp = (value) => {
 const daysBetween = (fromKey, toKey) =>
     Math.round((new Date(`${toKey}T00:00:00`) - new Date(`${fromKey}T00:00:00`)) / 86400000);
 
-// A user sees their own visits; a manager also sees direct reports'.
+// A user sees their own visits; managers see their team (all levels); head office sees everyone.
 const assertCanView = async (actingUserId, targetUserId) => {
     if (sameId(targetUserId, actingUserId)) return;
 
-    const target = await VisitsDA.getUser(targetUserId);
-
-    if (!target || !sameId(target.ManagerId, actingUserId)) {
+    if (!(await canViewUser(actingUserId, targetUserId))) {
         throw fail(403, "You can only view your own or your team's visits.");
     }
 };
