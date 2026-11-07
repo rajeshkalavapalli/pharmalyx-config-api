@@ -375,3 +375,9 @@
 ### V 1.0.75
 
 - My Day doctors carry the clinic (or hospital) location (lat / lng) so the phone can order them nearest first
+
+
+### V 1.0.76
+
+- Doctor journey (GET /app/truth/journey?userId=): each assigned doctor's stage over 90 days - Not visited, Visited, Samples given, First prescription, Regular prescriber, or Stalled (6+ visits, no prescriptions) - from visits, samples given, RCPA and doctor business
+- Brand vs rep (GET /app/truth/brands): for each product, the share of visited, RCPA-checked doctors who prescribe it, per rep and for the team; verdict Brand weak for everyone (team below 20%) or Some reps behind peers (20+ points below the team)
