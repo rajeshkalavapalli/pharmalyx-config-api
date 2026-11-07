@@ -8,6 +8,7 @@ const Audits = require('./AuditsHandler');
 router.get('/audits/today', Audits.getToday);
 router.get('/audits', Audits.list);
 router.post('/audits/cross', Audits.assignCross);
+router.post('/audits/device', Audits.enrollDevice);
 router.post('/audits/:auditId/check-in', Audits.checkIn);
 router.post('/audits/:auditId/result', Audits.decide);
 

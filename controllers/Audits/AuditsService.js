@@ -17,6 +17,53 @@ const RESULTS = {
 };
 const KINDS = ['RANDOM', 'CROSS'];
 const PER_DAY = 2; // doctors picked per joint day / cross-audit
+const crypto = require('crypto');
+
+// Fingerprint-checked audits. The phone keeps a random secret that only opens with the owner's fingerprint / face
+// (expo-secure-store requireAuthentication); Android throws it away when a new fingerprint is added. We keep its hash.
+const hashSecret = (secret) => crypto.createHash('sha256').update(String(secret)).digest('hex');
+const DEVICE_SQL = {
+    ACTIVE: `SELECT TOP 1 DeviceKeyId, SecretHash FROM dbo.BiometricDevices WHERE UserId = @UserId AND DeviceId = @DeviceId AND RevokedOn IS NULL`,
+    REVOKE: `UPDATE dbo.BiometricDevices SET RevokedOn = @Now, RevokedReason = @Reason WHERE UserId = @UserId AND RevokedOn IS NULL`,
+    ADD: `INSERT INTO dbo.BiometricDevices (DeviceKeyId, UserId, DeviceId, SecretHash, EnrolledOn) VALUES (@Id, @UserId, @DeviceId, @Hash, @Now)`,
+    USED: `UPDATE dbo.BiometricDevices SET LastUsedOn = @Now WHERE DeviceKeyId = @Id`,
+};
+const noDevicesTable = (error) => /Invalid object name 'dbo\.BiometricDevices'/i.test(error?.message || '');
+
+// Register this phone's fingerprint-protected secret (first audit, a new phone, or after fingerprints changed).
+exports.enrollDevice = async (actingUserId, payload) => {
+    requireActingUser(actingUserId);
+    const deviceId = String(payload.DeviceId || '').trim().slice(0, 100);
+    const secret = String(payload.Secret || '');
+    if (!deviceId || secret.length < 32) throw fail(400, 'Device details are missing.');
+    try {
+        const now = new Date();
+        await customQuery(DEVICE_SQL.REVOKE, { UserId: actingUserId, Now: now, Reason: payload.Reason === 'BIOMETRICS_CHANGED' ? 'Fingerprints changed on the phone' : 'New phone or re-enrolled' });
+        await customQuery(DEVICE_SQL.ADD, { Id: generateUUID(), UserId: actingUserId, DeviceId: deviceId, Hash: hashSecret(secret), Now: now });
+        if (payload.Reason === 'BIOMETRICS_CHANGED') {
+            const log = auditQuery({ entityType: 'USER', entityId: actingUserId, action: 'BIOMETRICS_CHANGED', actorId: actingUserId, after: { deviceId } });
+            await customQuery(log.sqlQuery, log.inputs).catch(() => null);
+        }
+        return { message: 'Fingerprint check is set up on this phone.' };
+    } catch (error) {
+        if (noDevicesTable(error)) throw fail(503, 'Fingerprint audits are not set up yet. Run their SQL in the database first.');
+        throw error;
+    }
+};
+
+// True when the secret sent matches this person's active phone; flags it when it does not.
+const verifyDevice = async (userId, deviceId, secret) => {
+    if (!deviceId || !secret) return false;
+    try {
+        const [row] = await customQuery(DEVICE_SQL.ACTIVE, { UserId: userId, DeviceId: String(deviceId).slice(0, 100) });
+        if (!row || row.SecretHash !== hashSecret(secret)) return false;
+        await customQuery(DEVICE_SQL.USED, { Id: row.DeviceKeyId, Now: new Date() });
+        return true;
+    } catch (error) {
+        if (noDevicesTable(error)) return false;
+        throw error;
+    }
+};
 const CLINIC_RADIUS_M = 300;
 
 const q = (name, inputs = {}) => customQuery(sql[name](), inputs);
@@ -197,10 +244,12 @@ exports.checkIn = async (actingUserId, auditId, payload) => {
         if (distance != null && distance - Math.min(Number(fix.accuracy) || 0, 100) > CLINIC_RADIUS_M) {
             throw fail(400, `You are about ${distance} m from Dr. ${audit.DoctorName}'s clinic. Check in at the clinic (within ${CLINIC_RADIUS_M} m).`);
         }
-        const verifiedBy = payload.Biometric === true ? 'BIOMETRIC' : 'GPS';
+        // Fingerprint-checked when the phone sent its secret and it matches the registered phone.
+        const verifiedBy = (await verifyDevice(actingUserId, payload.DeviceId, payload.BiometricSecret)) ? 'BIOMETRIC' : 'GPS';
         await q('CHECK_IN', { AuditId: auditId, ActingUserId: actingUserId, Now: new Date(), Latitude: lat, Longitude: lng, Accuracy: fix.accuracy == null ? null : Math.round(Number(fix.accuracy)), DistanceM: distance, VerifiedBy: verifiedBy });
         return {
-            message: distance == null ? "Checked in. This clinic isn't pinned yet, so the place can't be compared." : `Checked in about ${distance} m from the clinic.`,
+            message: `${distance == null ? "Checked in. This clinic isn't pinned yet, so the place can't be compared." : `Checked in about ${distance} m from the clinic.`}${verifiedBy === 'BIOMETRIC' ? ' Fingerprint confirmed.' : ''}`,
+            verifiedBy,
             distanceM: distance,
         };
     });

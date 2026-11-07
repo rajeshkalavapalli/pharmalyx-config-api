@@ -399,3 +399,10 @@
 
 - Doctor handover (POST /app/doctors/handover and /preview): moves all of a leaving rep's active doctors to another person in one transaction (reactivates or adds the new links, closes the old ones), audited, and the new rep gets a phone notification; visits, samples and prescriptions stay with each doctor
 - Weekly brief: names trimmed, "and N more" instead of an ellipsis
+
+
+### V 1.0.80
+
+- Fingerprint-checked joint audits: POST /audits/device registers the phone's fingerprint-protected secret (sha256 hash in dbo.BiometricDevices); check-in marks VerifiedBy BIOMETRIC when the secret matches, and a fingerprint change on the phone is written to the audit log (BIOMETRICS_CHANGED)
+- Voice notes on visits: POST /visits/:visitId/voice (raw audio, 3 MB max, owner only) and GET /visits/:visitId/voice (owner, seniors, head office); stored through fileStore, details in dbo.VisitVoiceNotes
+- Needs SQL: dbo.BiometricDevices and dbo.VisitVoiceNotes (with the organisation security policy); without them the features answer with a clear 503 message
