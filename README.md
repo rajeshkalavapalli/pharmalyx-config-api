@@ -336,3 +336,11 @@
 - Orders and sales business "My team", the team picker (/app/my-doctors/team) and the dashboard team figures cover the whole team (reportScope.teamIdsJson / IN_TEAM)
 - Reports and insights: admin (masters.edit) counts as head office and sees everyone
 - Tour plan of a team member opens for managers above and head office too (edit stays with the owner, approve with the reporting manager)
+
+
+### V 1.0.71
+
+- Sign-in protection (utils/loginLimiter.js): 5 wrong passwords for a login name lock it for 15 minutes; 20 wrong passwords from one address in 15 minutes block that address for 15 minutes; answered with 429 and the minutes left
+- Security headers with helmet (nosniff, HSTS, frame protection, no X-Powered-By); files stay readable by the web app (cross-origin resource policy)
+- CORS: when CORS_ORIGINS is not set on a hosted server, only our sites may call the API (demo / app / www .pharmalyx.in and the Render web app); local machines still allow any origin; the phone app is not affected
+- trust proxy on, so the caller's address is right behind Render

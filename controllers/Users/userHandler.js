@@ -1,6 +1,7 @@
 const userService = require('./userService');
 const { issueToken, issueChoiceTicket, verifyChoiceTicket } = require('../../utils/auth');
 const { getSeats } = require('../../utils/seats');
+const limiter = require('../../utils/loginLimiter');
 
 exports.getDesignation = async (req, res) => {
     try {
@@ -136,7 +137,18 @@ exports.login = async (req, res) => {
             return res.status(400).json({ message: "Enter your username and password." });
         }
 
-        const result = await userService.login(login, password);
+        // Too many wrong passwords for this name or from this address: wait before trying again.
+        const locked = limiter.checkLogin(login, req.ip);
+        if (locked) return res.status(429).json({ message: locked });
+
+        let result;
+        try {
+            result = await userService.login(login, password);
+        } catch (err) {
+            if (err.status === 401) limiter.recordFailure(login, req.ip);
+            throw err;
+        }
+        limiter.clearLogin(login);
 
         // The password matched in several companies: the person picks one (POST /login/choose).
         if (result.choices) {
