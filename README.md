@@ -381,3 +381,9 @@
 
 - Doctor journey (GET /app/truth/journey?userId=): each assigned doctor's stage over 90 days - Not visited, Visited, Samples given, First prescription, Regular prescriber, or Stalled (6+ visits, no prescriptions) - from visits, samples given, RCPA and doctor business
 - Brand vs rep (GET /app/truth/brands): for each product, the share of visited, RCPA-checked doctors who prescribe it, per rep and for the team; verdict Brand weak for everyone (team below 20%) or Some reps behind peers (20+ points below the team)
+
+
+### V 1.0.77
+
+- Chemist availability (controllers/ChemistAvailability, table dbo.ChemistAvailability): reps mark each product on the shelf or missing at their assigned chemists (POST /app/chemists/availability, GET ?pharmacyId= for the latest status); GET /app/chemists/availability/summary gives the team's stock-outs (latest check per chemist and product)
+- Insights: CHEMIST_PRODUCT_MISSING alert when a product is missing at several chemists

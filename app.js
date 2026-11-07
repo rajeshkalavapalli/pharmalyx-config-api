@@ -92,6 +92,7 @@ const JointWork = require('./controllers/JointWork');
 const Push = require('./controllers/Push');
 const Audits = require('./controllers/Audits');
 const Truth = require('./controllers/Truth');
+const ChemistAvailability = require('./controllers/ChemistAvailability');
 
 // Database: db.js connects at start-up and retries on its own until SQL Server answers.
 require('./db');
@@ -164,6 +165,7 @@ app.use('/app', JointWork)
 app.use('/app', Push)
 app.use('/app', Audits)
 app.use('/app', Truth)
+app.use('/app', ChemistAvailability)
 
 
 

@@ -199,6 +199,15 @@ const RULES = [
         t2: null,
         labels: ['Days since order'],
     },
+    {
+        code: 'CHEMIST_PRODUCT_MISSING',
+        group: 'STOCK',
+        title: 'Product missing at chemists',
+        description: 'Reps found one of our products off the shelf at several chemists - prescriptions there go to competitors.',
+        t1: 2,
+        t2: 30,
+        labels: ['Chemists missing it', 'Latest check within days'],
+    },
 
     // Field truth: is the field work real? (only our own signals - doctors are never asked)
     {

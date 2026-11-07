@@ -531,6 +531,30 @@ const truthAlerts = async (inputs, on, p, reps) => {
         )
     );
 
+    const shelfRule = on('CHEMIST_PRODUCT_MISSING');
+    if (shelfRule) {
+        try {
+            const Availability = require('../ChemistAvailability/AvailabilityService');
+            const { products } = await Availability.getSummary(inputs.ActingUserId, { days: shelfRule.t2 });
+            products
+                .filter((prod) => prod.missingCount >= shelfRule.t1)
+                .forEach((prod) =>
+                    out.push(
+                        alert(shelfRule, `${prod.productId}|${prod.missingCount}|${p.MonthStart}`, {
+                            severity: prod.missingCount >= shelfRule.t1 * 2 ? 'HIGH' : 'MEDIUM',
+                            subject: prod.productName,
+                            employee: prod.missing[0]?.checkedBy || '—',
+                            detail: `Missing at ${prod.missingCount} of ${prod.checked} chemists checked: ${prod.missing.slice(0, 4).map((m) => m.pharmacyName).join(', ')}${prod.missing.length > 4 ? '…' : ''}.`,
+                            since: prod.missing[0]?.checkDate || null,
+                            link: '/insights/truth',
+                        })
+                    )
+                );
+        } catch (error) {
+            if (error.status !== 503) console.error('Chemist availability alerts skipped:', error.message);
+        }
+    }
+
     if (investRule) {
         try {
             const Spend = require('../DoctorSpend/SpendService');
