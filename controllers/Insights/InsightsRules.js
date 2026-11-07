@@ -268,6 +268,24 @@ const RULES = [
         t2: null,
         labels: ['Show alerts from the last (days)'],
     },
+    {
+        code: 'AUDIT_COVERAGE',
+        group: 'MANAGER',
+        title: 'Rep not audited this month',
+        description: 'A rep had fewer joint audits done this month than required, or audits were skipped.',
+        t1: 2,
+        t2: 20,
+        labels: ['Audits needed per month', 'Check from day of month'],
+    },
+    {
+        code: 'AUDIT_FAILED',
+        group: 'TRUTH',
+        title: 'Joint audit failed',
+        description: 'On a joint or cross audit the doctor or clinic was not found, or the doctor did not know the rep.',
+        t1: 60,
+        t2: null,
+        labels: ['Show alerts from the last (days)'],
+    },
 ];
 
 const GROUPS = {

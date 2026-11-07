@@ -184,6 +184,37 @@ module.exports = {
         `;
     },
 
+    // Joint audits per rep this month (done / skipped) and failed audits recently.
+    AUDIT_STATS: () => {
+        return `
+            ${SCOPE_CTE}
+            SELECT u.UserId, ${displayName('u')} AS EmployeeName,
+                   (SELECT COUNT(*) FROM dbo.JointAudits a WHERE a.UserId = u.UserId AND a.AuditDate >= @MonthStart AND a.Status <> 'ASSIGNED') AS Done,
+                   (SELECT COUNT(*) FROM dbo.JointAudits a WHERE a.UserId = u.UserId AND a.AuditDate >= @MonthStart AND a.AuditDate < @Today AND a.Status = 'ASSIGNED') AS Skipped
+            FROM Scope s
+            INNER JOIN Users u ON u.UserId = s.UserId
+            LEFT JOIN SystemLovDetails sld ON sld.SystemLovDetailId = u.DesignationId
+            WHERE ISNULL(u.IsActive, 1) = 1 AND u.UserId <> @ActingUserId AND ISNULL(sld.SystemLovDetailCode, '') <> 'ADMIN'
+              AND EXISTS (SELECT 1 FROM dbo.UserDoctorMapping m WHERE m.UserId = u.UserId AND ISNULL(m.IsActive, 'Yes') <> 'No')
+              AND ${IN_SCOPE('u.UserId')}
+        `;
+    },
+
+    AUDIT_FAILURES: () => {
+        return `
+            ${SCOPE_CTE}
+            SELECT a.AuditId, a.UserId, ${displayName('u')} AS EmployeeName, ${displayName('au')} AS AuditorName, d.DoctorName, d.Category,
+                   a.Status, a.Kind, a.Notes, CONVERT(VARCHAR(10), a.AuditDate, 23) AS AuditDate
+            FROM Scope s
+            INNER JOIN dbo.JointAudits a ON a.UserId = s.UserId
+            INNER JOIN Users u ON u.UserId = a.UserId
+            INNER JOIN Users au ON au.UserId = a.AuditorId
+            INNER JOIN dbo.Doctor d ON d.DoctorId = a.DoctorId
+            WHERE a.Status IN ('DOCTOR_NOT_FOUND', 'CLINIC_NOT_FOUND', 'NOT_RECOGNISED') AND a.AuditDate >= @Since
+              AND a.UserId <> @ActingUserId AND ${IN_SCOPE('a.UserId')}
+        `;
+    },
+
     GPS_FLAGS: () => {
         return `
             ${SCOPE_CTE}

@@ -90,6 +90,8 @@ const DoctorSpend = require('./controllers/DoctorSpend');
 const DataImport = require('./controllers/DataImport');
 const JointWork = require('./controllers/JointWork');
 const Push = require('./controllers/Push');
+const Audits = require('./controllers/Audits');
+const Truth = require('./controllers/Truth');
 
 // Database: db.js connects at start-up and retries on its own until SQL Server answers.
 require('./db');
@@ -160,6 +162,8 @@ app.use('/app', DoctorSpend)
 app.use('/app', DataImport)
 app.use('/app', JointWork)
 app.use('/app', Push)
+app.use('/app', Audits)
+app.use('/app', Truth)
 
 
 

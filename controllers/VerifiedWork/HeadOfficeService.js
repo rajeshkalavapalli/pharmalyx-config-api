@@ -70,11 +70,14 @@ const LIMITS = {
     SPEND_PARTLY_PCT: [0, 100],
     // Tour plan
     TOUR_PLAN_APPROVAL: [0, 1],
+    // Field Truth Score: coaching-only until this date (yyyymmdd, 0 = off)
+    TRUTH_LEARNING_UNTIL: [0, 99991231],
 };
 
 // Rules added after a company was set up: shown with their default until head office saves them.
 const NEW_SETTINGS = {
     TOUR_PLAN_APPROVAL: 'Tour plans need manager approval (1 = yes, 0 = approved straight away inside the territory)',
+    TRUTH_LEARNING_UNTIL: 'Field Truth Score learning mode until this date, yyyymmdd (scores are for coaching only; 0 = off)',
 };
 
 // Saved rows, plus any newer rule this company has not saved yet.

@@ -360,3 +360,13 @@
 - Money & investments: REP_COST_OVER_BUSINESS (business below the expected ramp-up for the rep's cost, from Business tracking) and DOCTOR_INVESTMENT_BEHIND (paid doctor investments behind the promised business, from Doctor spend)
 - Manager accountability: MANAGER_APPROVES_ALL (approves nearly every deviation) and JOINT_GPS_MISMATCH (joint visit logged but the colleague's phone was never near the clinic)
 - All rules are on / off and tunable on the Insights rules page like the existing ones; doctors are never asked to confirm anything
+
+
+### V 1.0.74
+
+- Joint audits (controllers/Audits, table dbo.JointAudits - run the SQL in SSMS): on a confirmed joint day the senior gets 2 of the rep's doctors to check, picked by risk (not verified, many visits with no Rx, short visits, new) plus one purely random; only the auditor sees them, never the rep
+- Cross-audit: head office sends another manager (not the rep's own) to check a rep's doctors on a date; auditor checks in at the pinned clinic (within 300 m, fake GPS refused) and records Passed / Doctor not found / Clinic not found / Doctor didn't know the rep; for joint audits the system also checks the rep's own check-in at that doctor around the same time
+- GET /app/audits/today, GET /app/audits?month=, POST /app/audits/cross, POST /app/audits/:id/check-in, POST /app/audits/:id/result
+- Field Truth Score (controllers/Truth): 0-100 per person per month = presence 40 (Valid / Needs a look visits) + pattern 20 (visits ending right at the minimum stay, many doctors in minutes) + audits 25 + outcome 15 (share of visited doctors prescribing vs the team, only after 90 days in the job); bands Trusted / Watch / Risk; GET /app/truth/scores (team, admins left out) and GET /app/truth/me (own score, audits as counts only)
+- Learning mode: work setting TRUTH_LEARNING_UNTIL (yyyymmdd) - scores shown as coaching-only until then
+- Insights: AUDIT_COVERAGE (fewer audits than required this month or skipped audits) and AUDIT_FAILED alerts

@@ -26,6 +26,7 @@ const DEFAULTS = {
     ONE_SPOT_METERS: 100, // ... reported from within this distance of each other
     NO_TRAVEL_KM: 5, // an Ex-HQ / Outstation day with less travel than this
     TOUR_PLAN_APPROVAL: 0, // 1 = the reporting manager approves every confirmed tour plan
+    TRUTH_LEARNING_UNTIL: 0, // yyyymmdd: Field Truth Score is coaching-only until then
 };
 
 const IST_OFFSET_MINUTES = 330;

@@ -495,6 +495,42 @@ const truthAlerts = async (inputs, on, p, reps) => {
         });
     }
 
+    const auditCoverage = on('AUDIT_COVERAGE');
+    const auditFailed = on('AUDIT_FAILED');
+    const [auditStats, auditFails] = await Promise.all([
+        auditCoverage && p.dayOfMonth >= auditCoverage.t2 ? InsightsDA.getAuditStats({ ...inputs, MonthStart: p.MonthStart, Today: p.Today }) : [],
+        auditFailed ? InsightsDA.getAuditFailures({ ...inputs, Since: addDays(p.Today, -(auditFailed.t1 || 60)) }) : [],
+    ]);
+    auditStats.forEach((row) => {
+        const done = number(row.Done);
+        const skipped = number(row.Skipped);
+        if (done >= auditCoverage.t1 && !skipped) return;
+        out.push(
+            alert(auditCoverage, `${row.UserId}|${p.MonthStart}|${done}|${skipped}`, {
+                severity: skipped ? 'HIGH' : 'MEDIUM',
+                subject: row.EmployeeName,
+                employee: row.EmployeeName,
+                detail: `${done} of ${auditCoverage.t1} joint audits done this month${skipped ? `, ${skipped} skipped` : ''}.`,
+                since: p.MonthStart,
+                link: '/insights/truth',
+            })
+        );
+    });
+    const RESULT_TEXT = { DOCTOR_NOT_FOUND: 'doctor not found at the clinic', CLINIC_NOT_FOUND: 'clinic not found', NOT_RECOGNISED: "doctor didn't know the rep" };
+    auditFails.forEach((row) =>
+        out.push(
+            alert(auditFailed, row.AuditId, {
+                severity: 'HIGH',
+                subject: `Dr. ${row.DoctorName}`,
+                category: row.Category,
+                employee: row.EmployeeName,
+                detail: `${row.Kind === 'CROSS' ? 'Cross-audit' : 'Joint audit'} by ${row.AuditorName} on ${row.AuditDate}: ${RESULT_TEXT[row.Status] || row.Status}.${row.Notes ? ` "${row.Notes}"` : ''}`,
+                since: row.AuditDate,
+                link: '/insights/truth',
+            })
+        )
+    );
+
     if (investRule) {
         try {
             const Spend = require('../DoctorSpend/SpendService');
