@@ -276,10 +276,7 @@ exports.getTourPlan = async (actingUserId, userId, planMonth) => {
     const isOwner = sameId(plan.UserId, actingUserId);
     const isManager = sameId(plan.ManagerId, actingUserId);
 
-    if (!isOwner && !isManager) {
-        throw fail(403, 'You are not allowed to view this tour plan.');
-    }
-
+    // Viewing was checked above (owner, managers above, head office); edit / approve flags below stay owner / reporting manager.
     const details = await TourPlanDA.getTourPlanDetails(plan.TourPlanId);
     const status = statusKey(statuses, plan.StatusId);
 

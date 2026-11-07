@@ -335,3 +335,4 @@
 - Opening a person's DCRs, visits, doctors, tour plans, deviations, doctor plans and secondary statements follows the same rule
 - Orders and sales business "My team", the team picker (/app/my-doctors/team) and the dashboard team figures cover the whole team (reportScope.teamIdsJson / IN_TEAM)
 - Reports and insights: admin (masters.edit) counts as head office and sees everyone
+- Tour plan of a team member opens for managers above and head office too (edit stays with the owner, approve with the reporting manager)
