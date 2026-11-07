@@ -26,6 +26,11 @@ exports.getNegativeFeedback = q('NEGATIVE_FEEDBACK');
 // The verification columns arrive with the doctor-verification schema.
 exports.getOverdueVerification = o('OVERDUE_VERIFICATION');
 exports.getGpsFlags = o('GPS_FLAGS');
+exports.getTruthDwell = o('TRUTH_DWELL');
+exports.getTruthCheckins = o('TRUTH_CHECKINS');
+exports.getTruthNoRx = o('TRUTH_NO_RX');
+exports.getJointVisitsGps = o('JOINT_VISITS_GPS');
+exports.getManagerDeviationDecisions = o('MANAGER_DEVIATION_DECISIONS');
 exports.getRcpaShares = o('RCPA_SHARES');
 exports.getRepStats = q('REP_STATS');
 exports.getRepPob = o('REP_POB');

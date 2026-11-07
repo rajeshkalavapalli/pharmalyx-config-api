@@ -352,3 +352,11 @@
 - Overview: collections shown as positive amounts (payments are stored as negative ledger entries)
 - Overview: office admins (designation ADMIN) are left out of the leaderboard, the people count and "not in the field today"
 - Dashboard header "reps" count also leaves out office admins and inactive people (matches the overview)
+
+
+### V 1.0.73
+
+- Insights: three new alert groups. Field truth: VISIT_JUST_ENOUGH (most visits end just after the minimum stay - waiting out the timer), VISIT_RAPID_CLUSTER (several doctors checked in within minutes), DOCTOR_NO_RX_AFTER_VISITS (many visits, no RCPA prescriptions and no business - the excuse timer)
+- Money & investments: REP_COST_OVER_BUSINESS (business below the expected ramp-up for the rep's cost, from Business tracking) and DOCTOR_INVESTMENT_BEHIND (paid doctor investments behind the promised business, from Doctor spend)
+- Manager accountability: MANAGER_APPROVES_ALL (approves nearly every deviation) and JOINT_GPS_MISMATCH (joint visit logged but the colleague's phone was never near the clinic)
+- All rules are on / off and tunable on the Insights rules page like the existing ones; doctors are never asked to confirm anything

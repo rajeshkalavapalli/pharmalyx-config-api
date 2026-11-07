@@ -199,6 +199,75 @@ const RULES = [
         t2: null,
         labels: ['Days since order'],
     },
+
+    // Field truth: is the field work real? (only our own signals - doctors are never asked)
+    {
+        code: 'VISIT_JUST_ENOUGH',
+        group: 'TRUTH',
+        title: 'Visits stop right at the minimum stay',
+        description: 'Most of a rep\'s visits end just after the minimum stay time - a pattern of waiting out the timer (for example in the reception) rather than meeting the doctor.',
+        t1: 60,
+        t2: 20,
+        labels: ['Share of visits just above the minimum (%)', 'Minimum visits in the last 30 days'],
+    },
+    {
+        code: 'VISIT_RAPID_CLUSTER',
+        group: 'TRUTH',
+        title: 'Many doctors in a few minutes',
+        description: 'Check-ins at several different doctors within a few minutes - too fast for real calls.',
+        t1: 4,
+        t2: 20,
+        labels: ['Doctors', 'Within minutes'],
+    },
+    {
+        code: 'DOCTOR_NO_RX_AFTER_VISITS',
+        group: 'TRUTH',
+        title: 'Many visits, no prescriptions',
+        description: 'A doctor was visited many times but shows no prescriptions (RCPA) and no business - the "still converting" excuse has run out.',
+        t1: 8,
+        t2: 90,
+        labels: ['Visits at least', 'Within days'],
+    },
+
+    // Money & investments
+    {
+        code: 'REP_COST_OVER_BUSINESS',
+        group: 'MONEY',
+        title: 'Rep costs more than the business',
+        description: 'Since joining, the rep\'s business is well below the expected ramp-up for their cost (salary set in Business tracking).',
+        t1: 50,
+        t2: 2,
+        labels: ['Business below % of expected', 'Check from months after joining'],
+    },
+    {
+        code: 'DOCTOR_INVESTMENT_BEHIND',
+        group: 'MONEY',
+        title: 'Doctor investment not paying back',
+        description: 'A paid doctor investment (gift, CME, sponsorship) is behind the business promised for it.',
+        t1: 34,
+        t2: null,
+        labels: ['Alert after % of the period has passed'],
+    },
+
+    // Manager accountability
+    {
+        code: 'MANAGER_APPROVES_ALL',
+        group: 'MANAGER',
+        title: 'Manager approves almost every deviation',
+        description: 'A manager approved nearly all plan deviations of the team in the last 60 days.',
+        t1: 90,
+        t2: 5,
+        labels: ['Approved %', 'Minimum decisions'],
+    },
+    {
+        code: 'JOINT_GPS_MISMATCH',
+        group: 'MANAGER',
+        title: 'Joint visit without the colleague nearby',
+        description: 'A visit was logged as joint work, but the colleague\'s phone was not near the clinic at that time.',
+        t1: 30,
+        t2: null,
+        labels: ['Show alerts from the last (days)'],
+    },
 ];
 
 const GROUPS = {
@@ -206,6 +275,9 @@ const GROUPS = {
     REP: 'Rep performance',
     STOCK: 'Business & stock',
     GPS: 'GPS & location',
+    TRUTH: 'Field truth',
+    MONEY: 'Money & investments',
+    MANAGER: 'Manager accountability',
 };
 
 // Defaults merged with saved overrides: [{ ...rule, enabled, t1, t2, customised }]

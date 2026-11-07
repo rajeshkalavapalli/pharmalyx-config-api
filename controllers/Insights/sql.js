@@ -94,6 +94,96 @@ module.exports = {
     },
 
     // GPS review alerts written at visit time, for people in scope (never the viewer's own).
+    // ---------------------------------------------------------
+    // Field truth / manager accountability
+    // ---------------------------------------------------------
+
+    // Visits per rep (last N days) and how many ended just above the minimum stay.
+    TRUTH_DWELL: () => {
+        return `
+            DECLARE @MinSec INT = 60 * ISNULL((SELECT TOP 1 TRY_CAST(SettingValue AS INT) FROM dbo.AntiFraudSettings WHERE SettingKey = 'MIN_DWELL_MINUTES'), 3);
+            ${SCOPE_CTE}
+            SELECT v.UserId, ${displayName('u')} AS EmployeeName, COUNT(*) AS Visits,
+                   SUM(CASE WHEN v.DwellSeconds >= @MinSec AND v.DwellSeconds < @MinSec + @Margin THEN 1 ELSE 0 END) AS JustEnough,
+                   MAX(@MinSec) AS MinSec
+            FROM Scope s
+            INNER JOIN dbo.Visits v ON v.UserId = s.UserId
+            INNER JOIN Users u ON u.UserId = v.UserId
+            WHERE v.VisitDate >= @Since AND v.DwellSeconds IS NOT NULL AND ${IN_SCOPE('v.UserId')} AND v.UserId <> @ActingUserId
+            GROUP BY v.UserId, ${displayName('u')}
+        `;
+    },
+
+    // Check-in times (last N days) for the rapid-cluster check.
+    TRUTH_CHECKINS: () => {
+        return `
+            ${SCOPE_CTE}
+            SELECT TOP 20000 v.UserId, ${displayName('u')} AS EmployeeName, CONVERT(VARCHAR(10), v.VisitDate, 23) AS VisitDate, v.CheckInAt, v.DoctorId
+            FROM Scope s
+            INNER JOIN dbo.Visits v ON v.UserId = s.UserId
+            INNER JOIN Users u ON u.UserId = v.UserId
+            WHERE v.VisitDate >= @Since AND v.CheckInAt IS NOT NULL AND ${IN_SCOPE('v.UserId')} AND v.UserId <> @ActingUserId
+            ORDER BY v.UserId, v.CheckInAt
+        `;
+    },
+
+    // Doctors visited many times by a rep, with their prescriptions (RCPA) and business in the same period.
+    TRUTH_NO_RX: () => {
+        return `
+            ${SCOPE_CTE}
+            SELECT v.UserId, ${displayName('u')} AS EmployeeName, v.DoctorId, d.DoctorName, d.Category,
+                   COUNT(*) AS Visits, CONVERT(VARCHAR(10), MIN(v.VisitDate), 23) AS FirstVisit,
+                   (SELECT ISNULL(SUM(l.OurQuantity), 0) FROM dbo.RcpaEntries r INNER JOIN dbo.RcpaLines l ON l.RcpaId = r.RcpaId
+                    WHERE r.DoctorId = v.DoctorId AND r.AuditDate >= @Since) AS RxUnits,
+                   (SELECT ISNULL(SUM(b.ActualValue), 0) FROM dbo.DoctorBusiness b WHERE b.DoctorId = v.DoctorId AND b.BusinessMonth >= @SinceMonth) AS Business
+            FROM Scope s
+            INNER JOIN dbo.Visits v ON v.UserId = s.UserId
+            INNER JOIN Users u ON u.UserId = v.UserId
+            INNER JOIN dbo.Doctor d ON d.DoctorId = v.DoctorId
+            WHERE v.VisitDate >= @Since AND ${IN_SCOPE('v.UserId')} AND v.UserId <> @ActingUserId
+            GROUP BY v.UserId, ${displayName('u')}, v.DoctorId, d.DoctorName, d.Category
+            HAVING COUNT(*) >= @MinVisits
+        `;
+    },
+
+    // Joint-work visits and whether the colleague's phone was near the clinic around the check-in.
+    JOINT_VISITS_GPS: () => {
+        return `
+            ${SCOPE_CTE}
+            SELECT v.VisitId, v.UserId, ${displayName('u')} AS EmployeeName, v.JointWorkUserId, ${displayName('j')} AS JointName,
+                   d.DoctorName, CONVERT(VARCHAR(10), v.VisitDate, 23) AS VisitDate,
+                   CASE WHEN EXISTS (
+                        SELECT 1 FROM dbo.LocationPings p
+                        WHERE p.UserId = v.JointWorkUserId
+                          AND p.ServerAt BETWEEN DATEADD(MINUTE, -45, COALESCE(v.CheckInAt, v.CreatedOn)) AND DATEADD(MINUTE, 45, COALESCE(v.CheckInAt, v.CreatedOn))
+                          AND ABS(p.Latitude - v.Latitude) < 0.006 AND ABS(p.Longitude - v.Longitude) < 0.006
+                   ) OR EXISTS (
+                        SELECT 1 FROM dbo.Visits cv WHERE cv.UserId = v.JointWorkUserId AND cv.DoctorId = v.DoctorId AND cv.VisitDate = v.VisitDate
+                   ) THEN 1 ELSE 0 END AS Matched,
+                   CASE WHEN EXISTS (SELECT 1 FROM dbo.LocationPings p WHERE p.UserId = v.JointWorkUserId AND p.PingDate = v.VisitDate) THEN 1 ELSE 0 END AS HasTrail
+            FROM Scope s
+            INNER JOIN dbo.Visits v ON v.UserId = s.UserId
+            INNER JOIN Users u ON u.UserId = v.UserId
+            INNER JOIN Users j ON j.UserId = v.JointWorkUserId
+            LEFT JOIN dbo.Doctor d ON d.DoctorId = v.DoctorId
+            WHERE v.JointWorkUserId IS NOT NULL AND v.VisitDate >= @Since AND v.Latitude IS NOT NULL AND ${IN_SCOPE('v.UserId')}
+        `;
+    },
+
+    // Deviation decisions per reviewer (managers in scope) in the last N days.
+    MANAGER_DEVIATION_DECISIONS: () => {
+        return `
+            ${SCOPE_CTE}
+            SELECT dv.ReviewedBy AS UserId, ${displayName('m')} AS EmployeeName, COUNT(*) AS Decided,
+                   SUM(CASE WHEN dv.Status = 'APPROVED' THEN 1 ELSE 0 END) AS Approved
+            FROM Scope s
+            INNER JOIN dbo.TourPlanDeviation dv ON dv.ReviewedBy = s.UserId
+            INNER JOIN Users m ON m.UserId = dv.ReviewedBy
+            WHERE dv.ReviewedOn >= @Since AND dv.Status IN ('APPROVED', 'REJECTED') AND dv.ReviewedBy <> @ActingUserId AND ${IN_SCOPE('dv.ReviewedBy')}
+            GROUP BY dv.ReviewedBy, ${displayName('m')}
+        `;
+    },
+
     GPS_FLAGS: () => {
         return `
             ${SCOPE_CTE}

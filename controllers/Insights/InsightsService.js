@@ -333,7 +333,192 @@ const buildAlerts = async (inputs, rules) => {
         );
     }
 
+    // ---- Field truth / money / manager accountability ----
+    alerts.push(...(await truthAlerts(inputs, on, p, reps)));
+
     return alerts;
+};
+
+// Field truth, money and manager rules. Each part is skipped quietly if its data is missing.
+const truthAlerts = async (inputs, on, p, reps) => {
+    const out = [];
+    const justEnough = on('VISIT_JUST_ENOUGH');
+    const rapid = on('VISIT_RAPID_CLUSTER');
+    const noRx = on('DOCTOR_NO_RX_AFTER_VISITS');
+    const joint = on('JOINT_GPS_MISMATCH');
+    const approvesAll = on('MANAGER_APPROVES_ALL');
+    const costRule = on('REP_COST_OVER_BUSINESS');
+    const investRule = on('DOCTOR_INVESTMENT_BEHIND');
+    const since30 = addDays(p.Today, -30);
+
+    const [dwell, checkins, noRxRows, jointRows, decisions] = await Promise.all([
+        justEnough ? InsightsDA.getTruthDwell({ ...inputs, Since: since30, Margin: 60 }) : [],
+        rapid ? InsightsDA.getTruthCheckins({ ...inputs, Since: since30 }) : [],
+        noRx ? InsightsDA.getTruthNoRx({ ...inputs, Since: addDays(p.Today, -noRx.t2), SinceMonth: `${addDays(p.Today, -noRx.t2).slice(0, 7)}-01`, MinVisits: noRx.t1 }) : [],
+        joint ? InsightsDA.getJointVisitsGps({ ...inputs, Since: addDays(p.Today, -(joint.t1 || 30)) }) : [],
+        approvesAll ? InsightsDA.getManagerDeviationDecisions({ ...inputs, Since: addDays(p.Today, -60) }) : [],
+    ]);
+
+    if (justEnough) {
+        dwell.forEach((row) => {
+            const visits = number(row.Visits);
+            if (visits < justEnough.t2) return;
+            const pct = percent(number(row.JustEnough), visits);
+            if (pct < justEnough.t1) return;
+            out.push(
+                alert(justEnough, `${row.UserId}|${p.MonthStart}`, {
+                    severity: pct >= 85 ? 'HIGH' : 'MEDIUM',
+                    subject: row.EmployeeName,
+                    employee: row.EmployeeName,
+                    detail: `${pct}% of ${visits} visits in the last 30 days ended within a minute after the ${Math.round(number(row.MinSec) / 60)}-minute minimum stay.`,
+                    since: since30,
+                    link: '/field-operation/verified-work',
+                })
+            );
+        });
+    }
+
+    if (rapid) {
+        const byRepDay = new Map();
+        checkins.forEach((row) => {
+            const key = `${row.UserId}|${row.VisitDate}`;
+            if (!byRepDay.has(key)) byRepDay.set(key, []);
+            byRepDay.get(key).push(row);
+        });
+        byRepDay.forEach((rows) => {
+            const windowMs = rapid.t2 * 60000;
+            let worst = 0;
+            for (let i = 0; i < rows.length; i += 1) {
+                const start = new Date(rows[i].CheckInAt).getTime();
+                const doctors = new Set();
+                for (let k = i; k < rows.length && new Date(rows[k].CheckInAt).getTime() - start <= windowMs; k += 1) doctors.add(String(rows[k].DoctorId).toLowerCase());
+                worst = Math.max(worst, doctors.size);
+            }
+            if (worst < rapid.t1) return;
+            const first = rows[0];
+            out.push(
+                alert(rapid, `${first.UserId}|${first.VisitDate}`, {
+                    severity: worst >= rapid.t1 + 2 ? 'HIGH' : 'MEDIUM',
+                    subject: first.EmployeeName,
+                    employee: first.EmployeeName,
+                    detail: `${worst} different doctors checked in within ${rapid.t2} minutes on ${first.VisitDate}.`,
+                    since: first.VisitDate,
+                    link: '/field-operation/visits',
+                })
+            );
+        });
+    }
+
+    if (noRx) {
+        noRxRows
+            .filter((row) => number(row.RxUnits) === 0 && number(row.Business) === 0 && row.FirstVisit <= addDays(p.Today, -Math.round(noRx.t2 / 2)))
+            .forEach((row) =>
+                out.push(
+                    alert(noRx, `${row.UserId}|${row.DoctorId}|${p.MonthStart}`, {
+                        severity: row.Category === 'A' ? 'HIGH' : 'MEDIUM',
+                        subject: `Dr. ${row.DoctorName}`,
+                        category: row.Category,
+                        employee: row.EmployeeName,
+                        detail: `${row.Visits} visits since ${row.FirstVisit}, but no prescriptions in RCPA and no business. Rethink the effort on this doctor.`,
+                        since: row.FirstVisit,
+                        link: '/doctor-engagement/rcpa',
+                    })
+                )
+            );
+    }
+
+    if (joint) {
+        const days = new Map();
+        jointRows.forEach((row) => {
+            const key = `${row.UserId}|${row.JointWorkUserId}|${row.VisitDate}`;
+            const day = days.get(key) || { row, visits: 0, matched: 0, trail: false };
+            day.visits += 1;
+            day.matched += number(row.Matched);
+            day.trail = day.trail || Boolean(number(row.HasTrail));
+            days.set(key, day);
+        });
+        days.forEach((day, key) => {
+            if (day.matched > 0) return;
+            out.push(
+                alert(joint, key, {
+                    severity: 'HIGH',
+                    subject: `${day.row.EmployeeName} with ${day.row.JointName}`,
+                    employee: day.row.EmployeeName,
+                    detail: day.trail
+                        ? `${day.visits} joint visit(s) on ${day.row.VisitDate}, but ${day.row.JointName}'s phone was never near those clinics.`
+                        : `${day.visits} joint visit(s) on ${day.row.VisitDate}, but ${day.row.JointName} recorded no location that day.`,
+                    since: day.row.VisitDate,
+                    link: '/field-operation/joint-work',
+                })
+            );
+        });
+    }
+
+    if (approvesAll) {
+        decisions.forEach((row) => {
+            const decided = number(row.Decided);
+            if (decided < approvesAll.t2) return;
+            const pct = percent(number(row.Approved), decided);
+            if (pct < approvesAll.t1) return;
+            out.push(
+                alert(approvesAll, `${row.UserId}|${p.MonthStart}`, {
+                    severity: pct === 100 ? 'HIGH' : 'MEDIUM',
+                    subject: row.EmployeeName,
+                    employee: row.EmployeeName,
+                    detail: `Approved ${row.Approved} of ${decided} plan deviations (${pct}%) in the last 60 days.`,
+                    since: addDays(p.Today, -60),
+                    link: '/field-operation/plan-deviation',
+                })
+            );
+        });
+    }
+
+    if (costRule && reps.length) {
+        const Business = require('../BusinessTracking/BusinessService');
+        const results = await Promise.all(
+            reps.map((row) => Business.getCostVsBusiness(inputs.ActingUserId, { userId: row.UserId }).then((r) => ({ row, r })).catch(() => null))
+        );
+        results.filter(Boolean).forEach(({ row, r }) => {
+            if (!r.salarySet || !r.summary || !r.joiningDate) return;
+            const months = Math.floor(daysBetween(String(r.joiningDate).slice(0, 10), p.Today) / 30);
+            if (months < costRule.t2 || r.summary.vsExpected == null || r.summary.vsExpected >= costRule.t1) return;
+            out.push(
+                alert(costRule, `${row.UserId}|${p.MonthStart}`, {
+                    severity: r.summary.vsExpected < costRule.t1 / 2 ? 'HIGH' : 'MEDIUM',
+                    subject: row.Name,
+                    employee: row.Name,
+                    detail: `Business is ${r.summary.vsExpected}% of the expected ramp-up after ${months} month(s); ${money(r.summary.cumulativeNet)} earned against ${money(r.summary.cumulativeCost)} spent.`,
+                    since: String(r.joiningDate).slice(0, 10),
+                    link: '/sales/business',
+                })
+            );
+        });
+    }
+
+    if (investRule) {
+        try {
+            const Spend = require('../DoctorSpend/SpendService');
+            const { requests } = await Spend.listRequests(inputs.ActingUserId, { filter: 'paid' });
+            (requests || []).forEach((r) => {
+                const o = r.outcome;
+                if (!o || o.elapsedPct < investRule.t1 || !['PARTLY_MET', 'CLAIM_FAILED'].includes(o.status)) return;
+                out.push(
+                    alert(investRule, `${r.RequestId}|${o.status}`, {
+                        severity: o.status === 'CLAIM_FAILED' ? 'HIGH' : 'MEDIUM',
+                        subject: `Dr. ${r.DoctorName || '—'}`,
+                        employee: r.UserName || r.EmployeeName || '—',
+                        detail: `${money(r.Amount)} invested; business is ${o.pct ?? 0}% of what was promised so far (${o.elapsedPct}% of the period gone).`,
+                        since: String(r.DisbursedOn || '').slice(0, 10) || null,
+                        link: '/doctor-engagement/spend',
+                    })
+                );
+            });
+        } catch (error) {
+            console.error('Doctor investment alerts skipped:', error.message);
+        }
+    }
+
+    return out;
 };
 
 const SEVERITY_ORDER = { HIGH: 0, MEDIUM: 1, LOW: 2 };
