@@ -45,7 +45,8 @@ const SQL = {
             SELECT COUNT(*) AS DcrSent FROM dbo.DailyCallReports r
             WHERE r.UserId = u.UserId AND r.ReportDate BETWEEN @MonthStart AND @MonthEnd AND r.Status IN ('SUBMITTED', 'APPROVED')
         ) ds
-        WHERE ${TEAM_U} AND ISNULL(u.IsActive, 1) = 1
+        -- Field people only: office admins are not ranked or counted as "not in the field".
+        WHERE ${TEAM_U} AND ISNULL(u.IsActive, 1) = 1 AND ISNULL(sld.SystemLovDetailCode, '') <> 'ADMIN'
     `,
 
     // Latest field events across the team (newest first).
@@ -159,7 +160,7 @@ exports.getOverview = async (actingUserId) => {
         available: true,
         headOffice,
         month: monthStart,
-        people: team.length,
+        people: people.length,
         headline: {
             visitsToday: n(head.VisitsToday),
             repsActiveToday: n(head.RepsActiveToday),
