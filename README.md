@@ -411,3 +411,8 @@
 ### V 1.0.81
 
 - TEMPORARY: POST /app/demo-reset (demo admin testdemo@123 only, dry run unless ?commit=1) empties the demo company's data for manual testing, keeps users / reporting / locations / settings, and adds today's approved Tirupathi tour plan for testmanager and testbde. To be removed right after use
+
+
+### V 1.0.82
+
+- Removed the temporary demo reset (POST /app/demo-reset) after cleaning the demo company for manual testing
