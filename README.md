@@ -406,3 +406,8 @@
 - Fingerprint-checked joint audits: POST /audits/device registers the phone's fingerprint-protected secret (sha256 hash in dbo.BiometricDevices); check-in marks VerifiedBy BIOMETRIC when the secret matches, and a fingerprint change on the phone is written to the audit log (BIOMETRICS_CHANGED)
 - Voice notes on visits: POST /visits/:visitId/voice (raw audio, 3 MB max, owner only) and GET /visits/:visitId/voice (owner, seniors, head office); stored through fileStore, details in dbo.VisitVoiceNotes
 - Needs SQL: dbo.BiometricDevices and dbo.VisitVoiceNotes (with the organisation security policy); without them the features answer with a clear 503 message
+
+
+### V 1.0.81
+
+- TEMPORARY: POST /app/demo-reset (demo admin testdemo@123 only, dry run unless ?commit=1) empties the demo company's data for manual testing, keeps users / reporting / locations / settings, and adds today's approved Tirupathi tour plan for testmanager and testbde. To be removed right after use

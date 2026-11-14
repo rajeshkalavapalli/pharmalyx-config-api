@@ -91,6 +91,7 @@ const DataImport = require('./controllers/DataImport');
 const JointWork = require('./controllers/JointWork');
 const Push = require('./controllers/Push');
 const Audits = require('./controllers/Audits');
+const DemoReset = require('./controllers/DemoReset'); // TEMPORARY: demo data reset
 const Truth = require('./controllers/Truth');
 const ChemistAvailability = require('./controllers/ChemistAvailability');
 
@@ -164,6 +165,7 @@ app.use('/app', DataImport)
 app.use('/app', JointWork)
 app.use('/app', Push)
 app.use('/app', Audits)
+app.use('/app', DemoReset)
 app.use('/app', Truth)
 app.use('/app', ChemistAvailability)
 
